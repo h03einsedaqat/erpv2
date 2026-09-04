@@ -1,0 +1,42 @@
+{
+  "name": "erp-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:server\" \"npm:client\"",
+    "build": "tsc --noEmit && vite build && node --import tsx scripts/ساخت-بسته-سورس.mjs dist",
+    "server": "tsx server/index.ts",
+    "client": "vite",
+    "serve": "tsx server/index.ts",
+    "start": "node scripts/راه-انداز-سرور.mjs",
+    "preview": "vite preview",
+    "migrate": "tsx server/migrate.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && vitest run tests/unit && node tests/e2e/run.mjs",
+    "test:unit": "vitest run tests/unit",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "docker:build": "docker build -t aria-erp:latest .",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "package:win": "node scripts/build-windows-package.mjs",
+    "build:demo": "tsc --noEmit && VITE_DEMO=true BASE_PATH=./ vite build && node --import tsx scripts/ساخت-بسته-سورس.mjs dist && node scripts/prepare-pages.mjs",
+    "build:demo:local": "VITE_DEMO=true BASE_PATH=./ vite build --outDir dist-demo && node --import tsx scripts/ساخت-بسته-سورس.mjs dist-demo && node scripts/prepare-pages.mjs dist-demo",
+    "code:collect": "node scripts/جمع-کد.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/pg": "latest",
+    "concurrently": "latest",
+    "jsdom": "^30.0.1",
+    "pg": "latest",
+    "pg-mem": "^3.0.14",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "^4.1.11"
+  }
+}
