@@ -32,6 +32,18 @@ function authToken(): string | null {
   return localStorage.getItem(tokenKey);
 }
 
+/**
+ * هدرهای احراز هویتِ یک درخواست.
+ * توکن هم در Authorization (استاندارد) و هم در X-Auth-Token فرستاده می‌شود؛ چون
+ * بعضی پروکسی‌ها/CDNها (مثلاً پیش‌نمایش‌های ابری و برخی تونل‌ها) هدرِ Authorization را
+ * حذف می‌کنند و کاربر با وجودِ ورودِ درست، از همه‌ی مسیرها ۴۰۱ می‌گرفت. سرور هر دو
+ * (و کوکیِ HttpOnly که خودش می‌گذارد) را می‌پذیرد؛ بنابراین اتصال به زیرساخت وابسته نیست.
+ */
+function authHeaders(token: string | null = authToken()): Record<string, string> {
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}`, 'X-Auth-Token': token };
+}
+
 /** آیا کاربر با دکمه‌ی خروج از برنامه بیرون رفته است؟ (تا برنامه خودکار برنگرداندش) */
 let userLoggedOut = false;
 
@@ -173,11 +185,10 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response 
   // در غیر این صورت درخواست با همان توکنِ کهنه می‌رفت و دوباره ۴۰۱ می‌گرفت
   if (tokenNeedsRefresh() && localStorage.getItem(refreshKey)) await refreshSession();
   const token = authToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (activeOrganizationId) headers['X-Organization-Id'] = activeOrganizationId;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined), ...authHeaders(token) };
+  if (activeOrganizationId) { headers['X-Organization-Id'] = activeOrganizationId; headers['X-Org-Id'] = activeOrganizationId; }
   try {
-    const result = await fetch(`${API_BASE}${path}`, { ...init, headers });
+    const result = await fetch(`${API_BASE}${path}`, { credentials: 'same-origin', ...init, headers });
     noteServerId(result.headers?.get?.('x-server-id'), result.headers?.get?.('x-secret-id'));
     if (result.status === 401) {
       /**
@@ -198,7 +209,7 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response 
           serverSession = true;
           sessionChecked = true;
           updateApiChip();
-          return await fetch(`${API_BASE}${path}`, { ...init, headers: { ...headers, Authorization: `Bearer ${authToken() ?? ''}` } });
+          return await fetch(`${API_BASE}${path}`, { credentials: 'same-origin', ...init, headers: { ...headers, ...authHeaders() } });
         }
       }
       /**
@@ -2005,6 +2016,7 @@ async function signInWithGoogle(credential: string): Promise<void> {
   try {
     const result = await fetch(`${API_BASE}/api/auth/google`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ credential }),
     });
@@ -2047,6 +2059,7 @@ async function login(event: SubmitEvent, remember = false): Promise<void> {
   try {
     const result = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, remember }),
     });
@@ -2164,6 +2177,7 @@ async function refreshSessionOnce(silent = false): Promise<boolean> {
   try {
     const result = await fetch(`${API_BASE}/api/auth/refresh`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
@@ -2176,6 +2190,7 @@ async function refreshSessionOnce(silent = false): Promise<boolean> {
       await new Promise((resolve) => setTimeout(resolve, 700));
       const retry = await fetch(`${API_BASE}/api/auth/refresh`, {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       }).catch(() => null);
@@ -2215,9 +2230,8 @@ function logout(): void {
   const token = authToken();
   // ابطالِ نشست در سمت سرور (توکن تازه‌سازی دیگر قابل استفاده نخواهد بود)
   if (refresh && !demoMode) {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    void fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', headers, body: JSON.stringify({ refreshToken: refresh }) }).catch(() => undefined);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...authHeaders(token) };
+    void fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify({ refreshToken: refresh }) }).catch(() => undefined);
   }
   session = null;
   serverSession = false;
@@ -3899,6 +3913,7 @@ async function connectToServer(event: SubmitEvent): Promise<void> {
     // ورود مستقیم (بدون apiFetch) تا به توکنِ کهنه وابسته نباشد
     const result = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
