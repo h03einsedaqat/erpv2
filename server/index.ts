@@ -686,6 +686,37 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
     }
 
 
+    /* ------------------------------ فضای کاری ------------------------------ */
+
+    /**
+     * فضای کاریِ شرکت: داده‌های ماژول‌ها (فاکتور، سفارش، کالا، کارمند، سرنخ، بودجه، …).
+     * پیش‌تر این داده‌ها فقط در حافظه‌ی مرورگر می‌ماند و با پاک شدنِ مرورگر از بین می‌رفت؛
+     * اکنون نسخه‌ی مرجع روی سرور نگه داشته می‌شود و هر تغییرِ کاربر بلافاصله اینجا ذخیره می‌گردد.
+     */
+    if (path === '/api/workspace' && request.method === 'GET') {
+      const payload = authorize(request, result, 'events.read');
+      if (!payload) return;
+      const organizationId = resolveOrganization(request, payload);
+      const workspace = await store.getWorkspace(organizationId);
+      send(result, response({ organizationId, entries: workspace?.entries ?? {}, updatedAt: workspace?.updatedAt ?? null }));
+      return;
+    }
+    if (path === '/api/workspace' && (request.method === 'PUT' || request.method === 'POST')) {
+      const payload = authorize(request, result, 'events.write');
+      if (!payload) return;
+      const input = await readJsonBody<{ entries?: Record<string, unknown> }>(request, result);
+      if (!input) return;
+      const entries = input.entries && typeof input.entries === 'object' && !Array.isArray(input.entries) ? input.entries : null;
+      if (!entries) { fail(result, 'ساختارِ داده‌ی فضای کاری معتبر نیست'); return; }
+      const allowed = Object.fromEntries(Object.entries(entries).filter(([key]) => /^erp-[a-z-]{2,40}$/.test(key)));
+      if (!Object.keys(allowed).length) { fail(result, 'هیچ کلیدِ معتبری برای ذخیره فرستاده نشده است'); return; }
+      try {
+        const saved = await store.saveWorkspaceEntries(resolveOrganization(request, payload), allowed, payload.username);
+        send(result, response({ ok: true, updatedAt: saved.updatedAt, keys: Object.keys(allowed) }));
+      } catch (error) { fail(result, error instanceof Error ? error.message : 'ذخیره‌ی فضای کاری ناموفق بود'); }
+      return;
+    }
+
     /* ------------------------------ رویدادها ------------------------------ */
 
     if (path === '/api/events' && request.method === 'GET') {

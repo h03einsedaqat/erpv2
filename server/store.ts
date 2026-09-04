@@ -238,10 +238,19 @@ export type Database = {
   fixedAssets: FixedAssetRecord[];
   productionOrders: ProductionOrderRecord[];
   taxSubmissions: TaxSubmissionRecord[];
+  /** فضای کاریِ هر شرکت: داده‌های ماژول‌های برنامه (فاکتورها، سفارش‌ها، کالاها، …) که پیش‌تر فقط در مرورگر می‌ماند */
+  workspaces: WorkspaceRecord[];
   /** کلیدِ امضای توکن (فقط وقتی اپراتور JWT_SECRET را تنظیم نکرده باشد)؛ همراهِ داده و پشتیبان‌ها می‌ماند */
   jwtSecret?: string;
 };
 
+export type WorkspaceRecord = {
+  organizationId: string;
+  /** کلید → مقدار (مثلاً erp-sales → آرایه‌ی فاکتورها) */
+  entries: Record<string, unknown>;
+  updatedAt: string;
+  updatedBy?: string;
+};
 export type TreasuryTransactionRecord = {
   id: string; organizationId: string; transactionType: 'receipt' | 'payment';
   accountTitle: string; bankOrCash: string; amount: number; description: string;
@@ -289,7 +298,7 @@ export type RecurringEntry = {
 const dataDirectory = resolve(process.cwd(), process.env.DATA_DIR ?? '.data');
 const dataFile = join(dataDirectory, 'store.json');
 
-const emptyDatabase = (): Database => ({ users: [], events: [], audit: [], counters: {}, periods: [], costCenters: [], documents: [], journals: [], stockMovements: [], bankStatements: [], payrollRecords: [], checks: [], boms: [], serials: [], organizations: [], memberships: [], refreshTokens: [], recurringEntries: [], treasuryTransactions: [], salesInvoices: [], purchaseOrders: [], fixedAssets: [], productionOrders: [], taxSubmissions: [] });
+const emptyDatabase = (): Database => ({ users: [], events: [], audit: [], counters: {}, periods: [], costCenters: [], documents: [], journals: [], stockMovements: [], bankStatements: [], payrollRecords: [], checks: [], boms: [], serials: [], organizations: [], memberships: [], refreshTokens: [], recurringEntries: [], treasuryTransactions: [], salesInvoices: [], purchaseOrders: [], fixedAssets: [], productionOrders: [], taxSubmissions: [], workspaces: [] });
 
 let cache: Database | null = null;
 let writeQueue: Promise<unknown> = Promise.resolve();
@@ -370,6 +379,7 @@ function load(): Database {
         fixedAssets: parsed.fixedAssets ?? base.fixedAssets,
         productionOrders: parsed.productionOrders ?? base.productionOrders,
         taxSubmissions: parsed.taxSubmissions ?? base.taxSubmissions,
+        workspaces: parsed.workspaces ?? base.workspaces,
         jwtSecret: parsed.jwtSecret ?? base.jwtSecret,
       };
       cache = database;
@@ -1953,6 +1963,14 @@ export async function importSnapshot(snapshot: Partial<BackupSnapshot>): Promise
     serials: Array.isArray(incoming.serials) ? incoming.serials : base.serials,
     organizations: Array.isArray(incoming.organizations) ? incoming.organizations : (snapshot as BackupSnapshot).organizations ?? base.organizations,
     memberships: Array.isArray(incoming.memberships) ? incoming.memberships : (snapshot as BackupSnapshot).memberships ?? base.memberships,
+    workspaces: Array.isArray(incoming.workspaces) ? incoming.workspaces : base.workspaces,
+    taxSubmissions: Array.isArray(incoming.taxSubmissions) ? incoming.taxSubmissions : base.taxSubmissions,
+    treasuryTransactions: Array.isArray(incoming.treasuryTransactions) ? incoming.treasuryTransactions : base.treasuryTransactions,
+    salesInvoices: Array.isArray(incoming.salesInvoices) ? incoming.salesInvoices : base.salesInvoices,
+    purchaseOrders: Array.isArray(incoming.purchaseOrders) ? incoming.purchaseOrders : base.purchaseOrders,
+    fixedAssets: Array.isArray(incoming.fixedAssets) ? incoming.fixedAssets : base.fixedAssets,
+    productionOrders: Array.isArray(incoming.productionOrders) ? incoming.productionOrders : base.productionOrders,
+    recurringEntries: Array.isArray(incoming.recurringEntries) ? incoming.recurringEntries : base.recurringEntries,
   };
   ensureOrganizationScaffold(database);
 
@@ -1970,6 +1988,33 @@ export async function importSnapshot(snapshot: Partial<BackupSnapshot>): Promise
     checks: database.checks.length,
     users: database.users.length,
   };
+}
+
+/* ------------------------------ فضای کاری ------------------------------ */
+
+/**
+ * فضای کاریِ شرکت: داده‌های ماژول‌های برنامه که پیش‌تر فقط در حافظه‌ی مرورگر
+ * نگه داشته می‌شد و با پاک شدنِ مرورگر از بین می‌رفت. اکنون نسخه‌ی مرجع روی
+ * سرور است و مرورگر فقط یک نسخه‌ی موقت (کش) دارد.
+ */
+export async function getWorkspace(organizationId: string): Promise<WorkspaceRecord | undefined> {
+  return load().workspaces.find((row) => row.organizationId === organizationId);
+}
+
+/** ذخیره‌ی یک یا چند کلید از فضای کاری (کلیدهای دیگر دست‌نخورده می‌مانند) */
+export async function saveWorkspaceEntries(organizationId: string, entries: Record<string, unknown>, actor?: string): Promise<WorkspaceRecord> {
+  if (!organizationId) throw new Error('شرکتِ فعال مشخص نیست');
+  return commit((database) => {
+    let record = database.workspaces.find((row) => row.organizationId === organizationId);
+    if (!record) {
+      record = { organizationId, entries: {}, updatedAt: new Date().toISOString() };
+      database.workspaces.push(record);
+    }
+    for (const [key, value] of Object.entries(entries)) record.entries[key] = value;
+    record.updatedAt = new Date().toISOString();
+    if (actor) record.updatedBy = actor;
+    return record;
+  });
 }
 
 /* --------------------------- توکن‌های تازه‌سازی --------------------------- */

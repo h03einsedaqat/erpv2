@@ -15,6 +15,21 @@ export async function boot({ offline = false, username = 'admin', password = 'ad
   virtualConsole.on('jsdomError', (error) => { if (!/Not implemented/.test(String(error.message))) errors.push(error.message); });
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost:8080/', pretendToBeVisual: true, virtualConsole });
   const { window } = dom;
+  /**
+   * jsdom تا نسخه‌ی ۲۹ متدهای Blob.text/arrayBuffer را پیاده نکرده است (نسخه‌ی ۳۰ دارد، اما
+   * Node کمتر از ۲۲.۲۲ را نمی‌پذیرد). برنامه از file.text() برای واردکردنِ CSV/پشتیبان
+   * استفاده می‌کند؛ این پُر‌کننده همان رفتارِ مرورگر را می‌دهد تا تست‌ها روی هر نسخه‌ای بگذرند.
+   */
+  if (typeof window.Blob.prototype.text !== 'function') {
+    const read = (blob, as) => new Promise((resolve, reject) => {
+      const reader = new window.FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      if (as === 'text') reader.readAsText(blob); else reader.readAsArrayBuffer(blob);
+    });
+    window.Blob.prototype.text = function text() { return read(this, 'text'); };
+    window.Blob.prototype.arrayBuffer = function arrayBuffer() { return read(this, 'buffer'); };
+  }
   window.fetch = offline ? () => Promise.reject(new Error('offline')) : (input, init) => fetch(new URL(String(input), 'http://localhost:8080/'), init);
   window.localStorage.clear();
   const script = window.document.createElement('script');

@@ -8,6 +8,8 @@ import './login-modern.css';
  */
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 let apiOnline = false;
+/** نسخه‌ی نمایشیِ بدونِ سرور (GitHub Pages): هیچ درخواستِ شبکه‌ای فرستاده نمی‌شود */
+const demoMode = import.meta.env.VITE_DEMO === 'true';
 
 /** کلید نسخه‌دار توکن؛ توکن‌های نسخه‌های قدیمی (غیر JWT) نادیده گرفته می‌شوند */
 const tokenKey = 'erp-token-v2';
@@ -82,10 +84,7 @@ function updateApiChip(): void {
 
   let label: string;
   let hint: string;
-  if (apiPaused()) {
-    label = '◍ حالت محلی';
-    hint = 'ارتباط با سرور برقرار نیست؛ کار شما با داده‌های مرورگر ادامه دارد. برای تلاشِ دوباره کلیک کنید';
-  } else if (checking) {
+  if (checking) {
     label = '… در حال بررسی اتصال';
     hint = 'در حال بررسی اتصال به سرور';
   } else if (apiOnline && serverSession) {
@@ -94,14 +93,14 @@ function updateApiChip(): void {
   } else if (apiOnline && session) {
     label = serverRestarted ? '○ سرویس در دسترس نیست' : '○ نیاز به اتصالِ دوباره';
     hint = serverRestarted
-      ? 'سرویس راه‌اندازیِ دوباره شده یا پایگاهِ داده‌اش در دسترس نیست؛ کار شما ادامه دارد و داده‌ها در مرورگر مانده‌اند'
-      : 'کار شما ادامه دارد و داده‌ها در مرورگر مانده‌اند؛ برای پیوستنِ دوباره کلیک کنید';
+      ? 'سرویس راه‌اندازیِ دوباره شده یا پایگاهِ داده‌اش در دسترس نیست؛ برای ادامه دوباره وارد شوید'
+      : 'نشست برقرار نیست؛ برای ورودِ دوباره کلیک کنید';
   } else if (apiOnline) {
     label = '● سرور آماده است';
     hint = 'سرور در دسترس است؛ وارد شوید تا داده‌ها همگام شوند';
   } else {
     label = '○ حالت آفلاین';
-    hint = 'backend در دسترس نیست؛ داده‌ها فقط در مرورگر ذخیره می‌شوند';
+    hint = 'سرور در دسترس نیست؛ تا برقراریِ ارتباط، تغییرات روی سرور ذخیره نمی‌شوند';
   }
   chip.textContent = label;
   chip.title = hint;
@@ -122,12 +121,18 @@ async function checkSession(): Promise<void> {
       if (renewed) { hydrateLocalState(); updateApiChip(); void afterSessionEstablished(); return; }
     }
     serverSession = false;
+    // سرور در دسترس است ولی هیچ نشستی نداریم؛ کار بدونِ نشست معنا ندارد
+    if (session) forceRelogin('برای ادامه‌ی کار وارد حساب کاربری شوید.');
     return;
   }
   const result = await apiFetch('/api/me');
-  void loadOrganizations();
   serverSession = Boolean(result?.ok);
-  if (serverSession) resumeApi();
+  if (serverSession) {
+    void loadOrganizations();
+  } else if (result && (result.status === 401 || result.status === 403)) {
+    // سرور در دسترس است اما نشستِ ذخیره‌شده را نمی‌پذیرد → ورودِ دوباره
+    forceRelogin();
+  }
 }
 
 /**
@@ -136,30 +141,34 @@ async function checkSession(): Promise<void> {
  * - توکن نامعتبر/منقضی: فقط یک‌بار اطلاع‌رسانی و سپس ادامه در حالت محلی
  */
 /**
- * فیوزِ ارتباط: اگر سرور چند بار نشست را نپذیرفت (۴۰۱ِ پیاپی)، برنامه دیگر درخواستِ
- * بی‌حاصل نمی‌فرستد تا کنسول پر از خطا نشود و برنامه سنگین نگردد؛ پس از مدتی دوباره
- * تلاش می‌کند. هر زمان کاربر روی نشانگرِ وضعیت بزند، بی‌درنگ امتحان می‌شود.
+ * پایانِ قطعیِ نشست: سرور در دسترس است اما توکن‌های ذخیره‌شده را نمی‌پذیرد
+ * (کلیدِ امضا عوض شده، پایگاه پاک شده، نشست باطل یا منقضی شده است).
+ * پیش‌تر برنامه در این حالت به «حالت محلی» می‌رفت و کاربر بی‌خبر با داده‌ی مرورگر
+ * کار می‌کرد؛ اکنون نشانه‌های نشست پاک و صفحه‌ی ورود نشان داده می‌شود تا هر
+ * ثبتی واقعاً روی سرور انجام شود.
  */
-let apiPausedUntil = 0;
-let authFailures = 0;
-let localModeSeeded = false;
-const apiPaused = (): boolean => Date.now() < apiPausedUntil;
-function pauseApi(): void {
-  authFailures += 1;
-  apiPausedUntil = Date.now() + Math.min(authFailures, 6) * 60_000;
-  updateApiChip();
-  void ensureLocalContent();
-}
-function resumeApi(): void {
-  authFailures = 0;
-  apiPausedUntil = 0;
+let reloginInProgress = false;
+function forceRelogin(message = 'نشست شما پایان یافته است؛ برای ادامه دوباره وارد شوید.'): void {
+  if (demoMode || reloginInProgress) return;
+  reloginInProgress = true;
+  serverSession = false;
+  sessionChecked = true;
+  localStorage.removeItem(tokenKey);
+  localStorage.removeItem(refreshKey);
+  localStorage.removeItem('erp-session');
+  session = null;
+  workspaceLoaded = false;
+  workspacePending = {};
+  closeAllModals();
+  preferLoginScreen = true;
+  renderLogin();
+  showToast(message);
+  window.setTimeout(() => { reloginInProgress = false; }, 1500);
 }
 
 async function apiFetch(path: string, init: RequestInit = {}): Promise<Response | null> {
   // نسخه‌ی نمایشی سرور ندارد؛ برنامه کاملاً محلی کار می‌کند و خطایی نشان داده نمی‌شود
   if (demoMode) return null;
-  // در حالتِ مکث هیچ درخواستی فرستاده نمی‌شود (کاربر در حالت محلی کار می‌کند)
-  if (apiPaused()) return null;
   // پیش از ساختنِ هدرها، اگر توکن رو به پایان است آن را بی‌صدا نو می‌کنیم؛
   // در غیر این صورت درخواست با همان توکنِ کهنه می‌رفت و دوباره ۴۰۱ می‌گرفت
   if (tokenNeedsRefresh() && localStorage.getItem(refreshKey)) await refreshSession();
@@ -198,12 +207,9 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response 
        * را پاک نمی‌کنیم: یک‌بار پیامی آرام نشان می‌دهیم و کار در حالت محلی ادامه می‌یابد.
        * اتصالِ دوباره با یک کلیک روی نشانگرِ وضعیت انجام می‌شود.
        */
-      serverSession = false;
-      sessionChecked = true;
-      pauseApi();
-      if (!sessionExpiredNotified) {
-        sessionExpiredNotified = true;
-        showToast('ارتباط با سرور قطع شد. کار شما ادامه دارد و داده‌ها در مرورگر ذخیره می‌شوند؛ برای همگام‌سازی روی نشانگرِ وضعیت بزنید.');
+      if (token) {
+        // توکن داشتیم و سرور آن را نپذیرفت و تازه‌سازی هم ممکن نبود → ورودِ دوباره
+        forceRelogin();
       }
     }
     return result;
@@ -269,7 +275,7 @@ function startStatusMonitor(): void {
   window.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   window.addEventListener('online', () => void refreshApiStatus());
   window.addEventListener('offline', () => { apiOnline = false; apiStatusStreak = 0; updateApiChip(); });
-  window.addEventListener('beforeunload', () => window.clearInterval(timer));
+  window.addEventListener('beforeunload', () => { window.clearInterval(timer); void flushWorkspace(); });
   // بازسازیِ معوق: هر زمان کاربر از فرم خارج شد، صفحه به‌روز می‌شود
   document.addEventListener('focusout', () => {
     if (!pendingDataRender) return;
@@ -366,14 +372,37 @@ function readKey<T>(key: string, fallback: T): T {
   if (raw === null) return fallback;
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
-const store = (key: string, value: unknown): void => { localStorage.setItem(scopedKey(key), JSON.stringify(value)); };
+/**
+ * ذخیره‌ی داده‌ی یک ماژول.
+ * مرورگر فقط یک نسخه‌ی موقت (کش) نگه می‌دارد تا صفحه سریع باز شود؛ نسخه‌ی مرجع
+ * روی سرور است و هر تغییر بلافاصله به سرور فرستاده می‌شود (PUT /api/workspace).
+ */
+const store = (key: string, value: unknown): void => {
+  localStorage.setItem(scopedKey(key), JSON.stringify(value));
+  queueWorkspaceSync(key, value);
+  if (!demoMode && !serverSession && session && !offlineWriteWarned) {
+    offlineWriteWarned = true;
+    showToast('ارتباط با سرور برقرار نیست؛ این تغییر روی سرور ذخیره نمی‌شود. پس از برقراریِ ارتباط دوباره وارد شوید.');
+  }
+};
+let offlineWriteWarned = false;
+/** آیا فضای کاری از سرور بارگذاری شده است؟ (پیش از آن هیچ چیزی به سرور فرستاده نمی‌شود) */
+let workspaceLoaded = false;
+let workspaceUpdatedAt: string | null = null;
+let workspacePending: Record<string, unknown> = {};
+let workspaceTimer = 0;
+let workspaceFlushing = false;
+let workspaceFlushAgain = false;
+let workspaceSaveWarned = false;
 // حالتِ شرکت‌ها باید پیش از نخستین استفاده از readKey تعریف شود
 let activeOrganizationId = localStorage.getItem('erp-organization-id') ?? '';
 let organizations: OrganizationSummary[] = [];
 let savedRecords: SavedRecord[] = readKey<SavedRecord[]>('erp-records', []);
 
 /** داده‌های نمونه برای کاربری که هنوز داده‌ای ندارد */
-function applyLocalDefaults(): void {
+function applyLocalDefaults(force = false): void {
+// در حالتِ سرور، داده‌ی نمونه فقط یک‌بار و آن هم برای شرکتی که هنوز هیچ داده‌ای روی سرور ندارد ساخته می‌شود
+if (!demoMode && !force) return;
 if (!fixedAssets.length) { fixedAssets = [{ id: 'demo-asset-1', assetCode: 'FA-0001', title: 'دستگاه CNC مدل X', location: 'سالن تولید', acquisitionCost: 3800000000, usefulLifeMonths: 120, accumulatedDepreciation: 380000000, status: 'فعال', isDemo: true }, { id: 'demo-asset-2', assetCode: 'FA-0002', title: 'لپ‌تاپ واحد مالی', location: 'ساختمان اداری', acquisitionCost: 65000000, usefulLifeMonths: 36, accumulatedDepreciation: 18000000, status: 'فعال', isDemo: true }]; store('erp-assets', fixedAssets); }
 if (!productionOrders.length) { productionOrders = [{ id: 'demo-production-1', orderNumber: 301, productTitle: 'محصول A-100', plannedQuantity: 86, materialTitle: 'مواد اولیه فولادی', materialCost: 154800000, laborCost: 32000000, totalCost: 186800000, status: 'در برنامه', isDemo: true }, { id: 'demo-production-2', orderNumber: 300, productTitle: 'محصول B-200', plannedQuantity: 42, materialTitle: 'قطعات مونتاژ', materialCost: 84000000, laborCost: 18000000, totalCost: 102000000, status: 'در حال تولید', isDemo: true }]; store('erp-production', productionOrders); }
 if (!employees.length) { employees = [{ id: 'demo-employee-1', personnelCode: '1001', fullName: 'مریم احمدی', department: 'مالی', jobTitle: 'حسابدار ارشد', baseSalary: 180000000, isActive: true, isDemo: true }, { id: 'demo-employee-2', personnelCode: '1002', fullName: 'رضا کریمی', department: 'انبار', jobTitle: 'انباردار', baseSalary: 145000000, isActive: true, isDemo: true }, { id: 'demo-employee-3', personnelCode: '1003', fullName: 'سارا نادری', department: 'فروش', jobTitle: 'کارشناس فروش', baseSalary: 165000000, isActive: true, isDemo: true }]; store('erp-employees', employees); }
@@ -473,7 +502,6 @@ applyLocalDefaults();
  * انجام می‌گیرد و مجموعه‌ای از داده‌های نمونه بارگذاری می‌شود تا بازدیدکننده
  * دقیقاً همان صفحه‌ای را ببیند که مشتریِ شما خواهد دید.
  */
-const demoMode = import.meta.env.VITE_DEMO === 'true';
 
 type DemoUser = { username: string; password: string; name: string; roleId: string; role: string; organization: string };
 
@@ -858,8 +886,98 @@ async function switchOrganization(id: string): Promise<void> {
  */
 async function afterSessionEstablished(): Promise<void> {
   await loadOrganizations();
+  await loadWorkspace().catch(() => false);
   await loadServerData().catch(() => false);
   if (session) render();
+}
+
+/* ------------------------- فضای کاری روی سرور ------------------------- */
+
+/** کلیدهایی که نسخه‌ی مرجعشان روی سرور نگه داشته می‌شود */
+const WORKSPACE_KEYS = ['erp-records', 'erp-journals', 'erp-accounts', 'erp-treasury', 'erp-sales', 'erp-purchases', 'erp-inventory', 'erp-users', 'erp-employees', 'erp-payroll', 'erp-assets', 'erp-production', 'erp-crm-leads', 'erp-crm-tickets', 'erp-budget', 'erp-contact', 'erp-credit-limits'] as const;
+
+/**
+ * بارگذاریِ فضای کاریِ شرکت از سرور. نسخه‌ی سرور همیشه مرجع است و جای کشِ مرورگر
+ * را می‌گیرد. اگر شرکت هنوز هیچ داده‌ای روی سرور ندارد (نخستین اجرا)، داده‌ی نمونه
+ * ساخته و همان لحظه روی سرور ذخیره می‌شود تا در همه‌ی مرورگرها یکسان باشد.
+ */
+async function loadWorkspace(): Promise<boolean> {
+  if (demoMode || !serverSession) return false;
+  const result = await apiFetch('/api/workspace');
+  if (!result?.ok) return false;
+  const payload = (await result.json().catch(() => null)) as { entries?: Record<string, unknown>; updatedAt?: string | null } | null;
+  if (!payload || typeof payload.entries !== 'object') return false;
+  const entries = payload.entries ?? {};
+  const serverHasData = Object.keys(entries).length > 0;
+  if (serverHasData) {
+    // نسخه‌ی سرور مرجع است و جای کشِ مرورگر را می‌گیرد
+    for (const key of WORKSPACE_KEYS) {
+      if (key in entries) localStorage.setItem(scopedKey(key), JSON.stringify(entries[key]));
+      else localStorage.removeItem(scopedKey(key));
+    }
+  }
+  workspaceUpdatedAt = payload.updatedAt ?? null;
+  hydrateLocalState();
+  workspaceLoaded = true;
+  if (!serverHasData) {
+    /**
+     * نخستین اتصالِ این شرکت: هرچه از قبل در مرورگر بوده (داده‌های نسخه‌های پیشین)
+     * به سرور منتقل می‌شود و اگر چیزی نبود، داده‌ی نمونه یک‌بار ساخته می‌شود.
+     */
+    applyLocalDefaults(true);
+    for (const key of WORKSPACE_KEYS) {
+      const raw = localStorage.getItem(scopedKey(key));
+      if (raw !== null) { try { workspacePending[key] = JSON.parse(raw); } catch { /* نادیده */ } }
+    }
+    await flushWorkspace();
+  }
+  return true;
+}
+
+/** صف‌بندیِ ذخیره روی سرور (چند تغییرِ پشت‌سرهم در یک درخواست فرستاده می‌شود) */
+function queueWorkspaceSync(key: string, value: unknown): void {
+  if (demoMode || !serverSession || !workspaceLoaded) return;
+  if (!(WORKSPACE_KEYS as readonly string[]).includes(key)) return;
+  workspacePending[key] = value;
+  window.clearTimeout(workspaceTimer);
+  workspaceTimer = window.setTimeout(() => void flushWorkspace(), 400);
+}
+
+/** ارسالِ تغییراتِ معوق به سرور؛ اگر ناموفق بود، در دورِ بعد دوباره تلاش می‌شود */
+async function flushWorkspace(): Promise<boolean> {
+  if (demoMode || !serverSession) return false;
+  if (workspaceFlushing) { workspaceFlushAgain = true; return false; }
+  const entries = workspacePending;
+  if (!Object.keys(entries).length) return true;
+  workspacePending = {};
+  workspaceFlushing = true;
+  try {
+    const result = await apiFetch('/api/workspace', { method: 'PUT', body: JSON.stringify({ entries }) });
+    if (!result?.ok) {
+      // برگرداندنِ تغییرات به صف تا از دست نروند
+      workspacePending = { ...entries, ...workspacePending };
+      if (result && result.status !== 401 && !workspaceSaveWarned) {
+        workspaceSaveWarned = true;
+        const body = (await result.json().catch(() => null)) as { error?: string } | null;
+        showToast(body?.error ?? 'ذخیره روی سرور انجام نشد؛ دوباره تلاش می‌شود.');
+      }
+      window.clearTimeout(workspaceTimer);
+      workspaceTimer = window.setTimeout(() => void flushWorkspace(), 5000);
+      return false;
+    }
+    workspaceSaveWarned = false;
+    const body = (await result.json().catch(() => null)) as { updatedAt?: string } | null;
+    if (body?.updatedAt) workspaceUpdatedAt = body.updatedAt;
+    return true;
+  } catch {
+    workspacePending = { ...entries, ...workspacePending };
+    window.clearTimeout(workspaceTimer);
+    workspaceTimer = window.setTimeout(() => void flushWorkspace(), 5000);
+    return false;
+  } finally {
+    workspaceFlushing = false;
+    if (workspaceFlushAgain) { workspaceFlushAgain = false; void flushWorkspace(); }
+  }
 }
 
 function openOrganizationsModal(): void {
@@ -964,8 +1082,10 @@ function safeModuleMarkup(module: { id: string; label: string }): string {
 window.addEventListener('error', (event: ErrorEvent) => { console.error('app error', event.message); });
 window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => { console.error('promise rejected', event.reason); });
 
+/** پس از خروج یا پایانِ نشست، بازسازی‌های بعدی باید صفحه‌ی ورود را نشان دهند نه صفحه‌ی معرفی */
+let preferLoginScreen = false;
 function render(): void {
-  if (!session) { renderLanding(); return; }
+  if (!session) { if (preferLoginScreen) renderLogin(); else renderLanding(); return; }
   if (!renderAllowed()) return;
   // ماژولی که کاربر به آن دسترسی ندارد هرگز نمایش داده نمی‌شود
   // فقط زمانی به ماژول نخست برمی‌گردیم که کاربر واقعاً به آن دسترسی ندارد؛
@@ -1002,8 +1122,7 @@ function render(): void {
   document.querySelector<HTMLButtonElement>('#logout')?.addEventListener('click', logout);
   document.querySelector<HTMLElement>('#api-chip')?.addEventListener('click', () => {
     if (demoMode) { openDemoNotice(); return; }
-    // هر کلیک یعنی «دوباره امتحان کن»: مکث برداشته می‌شود
-    resumeApi();
+    // هر کلیک یعنی «دوباره بررسی کن»
     void refreshApiStatus();
     if (apiOnline && serverSession) openConnectionDetails();
     else if (!apiOnline) openConnectionDetails();
@@ -1408,6 +1527,7 @@ async function downloadSourceDirectly(button: HTMLButtonElement, note: HTMLEleme
 function renderLanding(): void {
   const app = document.querySelector<HTMLDivElement>('#app');
   if (!app) return;
+  preferLoginScreen = false;
   closeAllModals();
   const plans = [
     { name: 'پایه', monthly: 4900000, yearly: 49000000, note: 'برای تیم‌های کوچک و شروع یکپارچه‌سازی', features: ['تا ۵ کاربر', 'مالی و حسابداری پایه', 'فروش و خرید', 'پشتیبانی ایمیلی', 'گزارش‌های استاندارد'], highlight: false, cta: 'شروع دوره آزمایشی' },
@@ -1930,7 +2050,20 @@ async function login(event: SubmitEvent, remember = false): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, remember }),
     });
-    if (!result.ok) { resetLoginButton(); showLoginError('نام کاربری یا رمز عبور صحیح نیست.'); return; }
+    if (!result.ok) {
+      resetLoginButton();
+      /**
+       * پیامِ خطا باید علتِ واقعی را بگوید. پیش‌تر هر پاسخِ ناموفقی «نام کاربری یا رمز عبور
+       * صحیح نیست» نشان داده می‌شد؛ در حالی که وقتی سرورِ API بالا نیامده و پروکسیِ توسعه
+       * (Vite) پاسخِ ۵۰۲/۵۰۰ می‌دهد، کاربر با رمزِ درست هم همین پیام را می‌دید و سردرگم می‌شد.
+       */
+      const body = (await result.json().catch(() => ({}))) as { error?: string };
+      if (result.status === 401) showLoginError(body.error ?? 'نام کاربری یا رمز عبور صحیح نیست.');
+      else if (result.status === 429) showLoginError(body.error ?? 'تلاش‌های ورود زیاد بود؛ چند دقیقه دیگر دوباره تلاش کنید.');
+      else if (result.status >= 500 || result.status === 404) showLoginError(`سرورِ برنامه در دسترس نیست (کد ${result.status}). مطمئن شوید سرویسِ API اجرا شده است.`);
+      else showLoginError(body.error ?? `ورود ناموفق بود (کد ${result.status}).`);
+      return;
+    }
     const payload = (await result.json()) as { user: Session; token: string; refreshToken: string };
     applyServerSession(payload.user, payload.token, payload.refreshToken);
     void afterSessionEstablished();
@@ -1938,15 +2071,8 @@ async function login(event: SubmitEvent, remember = false): Promise<void> {
     render();
   } catch (error) {
     resetLoginButton();
-    if (username !== 'admin' || password !== 'admin123') { showLoginError('ارتباط با سرور برقرار نشد. در حالت آفلاین فقط نام کاربری admin در دسترس است.'); return; }
-    // ورود محلی بدون توکن؛ کاربر می‌تواند بعداً از «اتصال به سرور» استفاده کند
-    session = { username: 'admin', name: 'حسین صادقی', role: 'مدیر سیستم', organization: 'گروه صنعتی آریا' };
-    localStorage.setItem('erp-session', JSON.stringify(session));
-    serverSession = false;
-    sessionChecked = true;
-    hydrateLocalState();
-    render();
-    showToast(`ورود در حالت آفلاین انجام شد (${(error as Error).message}). برای همگام‌سازی، روی نشانگر وضعیت بزنید.`);
+    // بدونِ سرور ورودی انجام نمی‌شود؛ داده‌ها فقط روی سرور نگه داشته می‌شوند
+    showLoginError(`ارتباط با سرور برقرار نشد (${(error as Error).message}). مطمئن شوید سرویسِ API اجرا شده است.`);
   }
 }
 
@@ -1954,8 +2080,6 @@ async function login(event: SubmitEvent, remember = false): Promise<void> {
 function applyServerSession(user: Session, token: string, refreshToken: string): void {
   authPromptShown = false;
   userLoggedOut = false;
-  // نشست برقرار شد: اگر پیش‌تر ارتباط به حالتِ مکث رفته بود، بی‌درنگ از سر گرفته می‌شود
-  resumeApi();
   session = user;
   localStorage.setItem('erp-session', JSON.stringify(user));
   localStorage.setItem(tokenKey, token);
@@ -2062,29 +2186,21 @@ async function refreshSessionOnce(silent = false): Promise<boolean> {
       }
       /**
        * نشستِ سرور در دسترس نیست (سرور راه‌اندازیِ دوباره شده، کلید عوض شده یا نشست
-       * واقعاً پایان یافته است). تصمیمِ مهم: کاربر را از برنامه بیرون نمی‌اندازیم و
-       * داده‌هایش را پاک نمی‌کنیم. نشانه‌ها را نگه می‌داریم تا اگر سرور با همان کلید
-       * برگشت، کار بدون وقفه ادامه یابد؛ در غیر این صورت فقط یک‌بار پنجره‌ی ورود
-       * نمایش داده می‌شود که کاربر هر زمان خواست آن را پر کند یا ببندد.
+       * واقعاً پایان یافته است). به جای ادامه در «حالت محلی»، صفحه‌ی ورود نشان داده
+       * می‌شود تا داده‌ها فقط روی سرور ثبت شوند.
        */
       serverSession = false;
       sessionChecked = true;
-      pauseApi();
-      if (!sessionExpiredNotified) {
-        sessionExpiredNotified = true;
-        showToast(serverRestarted
-          ? 'سرویس در میانِ کار راه‌اندازیِ دوباره شده یا پایگاهِ آن در دسترس نیست. کار شما ادامه دارد و داده‌ها در مرورگر می‌مانند؛ از نشانگرِ بالای صفحه دوباره متصل شوید.'
-          : 'ارتباطِ نشست با سرور قطع شده است. کار شما ادامه دارد و داده‌ها در مرورگر می‌مانند؛ هر زمان خواستید از نشانگرِ بالای صفحه دوباره متصل شوید.');
-      }
-      // پنجره تنها با خواستِ کاربر باز می‌شود (مزاحمِ کار نمی‌شود)
+      forceRelogin(serverRestarted
+        ? 'سرویس راه‌اندازیِ دوباره شده است؛ لطفاً دوباره وارد شوید.'
+        : 'نشست شما پایان یافته است؛ برای ادامه دوباره وارد شوید.');
       return false;
     }
     if (!result.ok) return false;
     const payload = (await result.json()) as { user: Session; token: string; refreshToken: string };
     applyServerSession(payload.user, payload.token, payload.refreshToken);
     sessionChannel?.postMessage({ type: 'session', token: payload.token, refreshToken: payload.refreshToken });
-    resumeApi();
-    if (!silent) void afterSessionEstablished();
+      if (!silent) void afterSessionEstablished();
     return true;
   } catch {
     return false;
@@ -2115,7 +2231,10 @@ function logout(): void {
   localStorage.removeItem(refreshKey);
   localStorage.removeItem('erp-last-user');
   localStorage.removeItem('erp-organization-id');
+  workspaceLoaded = false;
+  workspacePending = {};
   hydrateLocalState();
+  preferLoginScreen = true;
   renderLogin();
 }
 
@@ -2949,7 +3068,7 @@ function identityMarkup(): string { return `<section class="access-page"><div cl
 
 function sessionPanelMarkup(): string {
   const permissions = session?.permissions ?? [];
-  return `<div class="panel session-panel"><div class="panel-heading"><div><h2>نشست جاری</h2><p>اطلاعات کاربر وارد‌شده بر اساس توکن سرور</p></div><span class="count">${escapeHtml(session?.roleId ?? 'local')}</span></div>${serverSession ? '' : '<div class="session-connect"><p>نشست سرور فعال نیست؛ داده‌ها فقط در مرورگر ذخیره می‌شوند.</p><button class="primary-button" id="connect-server">اتصال به سرور</button></div>'}<div class="session-grid"><div><span>کاربر</span><strong>${escapeHtml(session?.name ?? '—')}</strong></div><div><span>نام کاربری</span><strong>${escapeHtml(session?.username ?? '—')}</strong></div><div><span>نقش</span><strong>${escapeHtml(session?.role ?? '—')}</strong></div><div><span>تعداد دسترسی</span><strong>${permissions.length ? String(permissions.length) : 'حالت محلی'}</strong></div></div>${permissions.length ? `<div class="permission-chips">${permissions.map((permission) => `<span class="tag-pill">${escapeHtml(permissionLabels[permission] ?? permission)}</span>`).join('')}</div>` : '<p class="empty-hint">دسترسی‌ها از سرور دریافت نشده‌اند؛ برنامه در حالت محلی اجرا می‌شود.</p>'}</div>`;
+  return `<div class="panel session-panel"><div class="panel-heading"><div><h2>نشست جاری</h2><p>اطلاعات کاربر وارد‌شده بر اساس توکن سرور</p></div><span class="count">${escapeHtml(session?.roleId ?? 'local')}</span></div>${serverSession ? '' : '<div class="session-connect"><p>نشست سرور فعال نیست؛ برای ثبتِ داده‌ها روی سرور دوباره وارد شوید.</p><button class="primary-button" id="connect-server">اتصال به سرور</button></div>'}<div class="session-grid"><div><span>کاربر</span><strong>${escapeHtml(session?.name ?? '—')}</strong></div><div><span>نام کاربری</span><strong>${escapeHtml(session?.username ?? '—')}</strong></div><div><span>نقش</span><strong>${escapeHtml(session?.role ?? '—')}</strong></div><div><span>تعداد دسترسی</span><strong>${permissions.length ? String(permissions.length) : 'حالت محلی'}</strong></div></div>${permissions.length ? `<div class="permission-chips">${permissions.map((permission) => `<span class="tag-pill">${escapeHtml(permissionLabels[permission] ?? permission)}</span>`).join('')}</div>` : '<p class="empty-hint">دسترسی‌ها از سرور دریافت نشده‌اند؛ برنامه در حالت محلی اجرا می‌شود.</p>'}</div>`;
 }
 
 function rolesPanelMarkup(): string {
@@ -3761,7 +3880,7 @@ function openConnectionDetails(): void {
 function openServerLogin(): void {
   document.querySelector('#server-login-modal')?.remove();
   openModal('server-login-modal', 'server-login-form', `<h2>اتصال به سرور</h2>
-    <p class="modal-hint">با وارد کردن نام کاربری و رمز عبور، داده‌های شما با سرور همگام می‌شود. داده‌های محلی حفظ می‌شوند.</p>
+    <p class="modal-hint">با وارد کردن نام کاربری و رمز عبور، نشست با سرور برقرار می‌شود و داده‌ها از سرور بارگذاری می‌گردند.</p>
     <label>نام کاربری<input name="username" required autocomplete="username" value="${escapeHtml(session?.username ?? '')}"></label>
     <label>رمز عبور<input name="password" type="password" required autocomplete="current-password"></label>
     <p class="server-login-error" id="server-login-error" hidden></p>
@@ -3777,12 +3896,7 @@ async function connectToServer(event: SubmitEvent): Promise<void> {
   const password = String(data.get('password') ?? '');
   const errorBox = document.querySelector<HTMLElement>('#server-login-error');
   try {
-    /**
-     * نکته: این درخواستِ ورود نباید از apiFetch عبور کند؛ اگر ارتباط به حالتِ مکث
-     * رفته باشد (۴۰۱ِ پیاپی)، apiFetch پاسخی نمی‌آورد و کاربر هرگز نمی‌توانست دوباره
-     * وصل شود. ورود، خودش کلیدِ پایانِ آن مکث است، پس مستقیم فرستاده می‌شود.
-     */
-    resumeApi();
+    // ورود مستقیم (بدون apiFetch) تا به توکنِ کهنه وابسته نباشد
     const result = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4227,7 +4341,7 @@ function bindBackupPanel(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-backup-file]').forEach((button) =>
     button.addEventListener('click', () => void downloadServerBackup(button.dataset.backupFile ?? '')),
   );
-  if (serverSession && !demoMode) void loadBackupList();
+  if (serverSession && !demoMode && Date.now() - backupListLoadedAt > 30_000) void loadBackupList();
   document.querySelector<HTMLButtonElement>('#backup-restore')?.addEventListener('click', () => {
     if (!serverSession) { showToast('بازگردانی روی سرور در حالت آفلاین ممکن نیست.'); return; }
     showToast('فایل پشتیبان (JSON) را انتخاب کنید.');
@@ -4242,7 +4356,9 @@ function bindBackupPanel(): void {
 }
 
 /** بارگذاریِ فهرستِ نسخه‌های پشتیبانِ سرور */
+let backupListLoadedAt = 0;
 async function loadBackupList(): Promise<void> {
+  backupListLoadedAt = Date.now();
   const result = await apiFetch('/api/backup/list');
   if (!result?.ok) return;
   const list = (await result.json().catch(() => [])) as Array<{ name: string; at: string; size: number }>;
@@ -5386,7 +5502,7 @@ function openTreasuryForm(): void {
  * اگر سرور درخواستی را نپذیرد (مثلاً دوره‌ی مالی بسته باشد)، پیامِ آن با احترام
  * به کاربر نشان داده می‌شود؛ داده‌ی محلی دست‌نخورده می‌ماند تا کار متوقف نشود.
  */
-async function warnIfRejected(result: Response | null, fallback = 'ثبت روی سرور انجام نشد؛ داده در دستگاه شما ذخیره شد.'): Promise<void> {
+async function warnIfRejected(result: Response | null, fallback = 'ثبت روی سرور انجام نشد؛ دوباره تلاش کنید.'): Promise<void> {
   if (!result || result.ok) return;
   const body = (await result.json().catch(() => null)) as { error?: string } | null;
   showToast(body?.error ?? fallback);
@@ -5482,21 +5598,6 @@ startStatusMonitor();
 // نصب روی دستگاه و کار بدون اینترنت (PWA)
 registerServiceWorker();
 setupInstallPrompt();
-
-/**
- * در حالتِ محلی (نبودِ ارتباط با سرور) اگر هیچ داده‌ای در مرورگر نباشد، داده‌ی نمونه
- * گذاشته می‌شود تا برنامه خالی و بی‌روح به نظر نرسد؛ این داده‌ها با برچسبِ
- * «داده نمونه آموزشی» مشخص‌اند و با نخستین اتصالِ واقعی کنار می‌روند.
- */
-async function ensureLocalContent(): Promise<void> {
-  if (demoMode || localModeSeeded || serverSession) return;
-  const hasData = salesInvoices.length || inventoryItems.length || employees.length || journals.length || treasuryTransactions.length;
-  if (hasData) return;
-  localModeSeeded = true;
-  seedDemoData();
-  render();
-  showToast('ارتباط با سرور برقرار نیست؛ برای اینکه برنامه خالی نماند، داده‌های نمونه نمایش داده می‌شود. با اتصال، داده‌های واقعی شما جایگزین می‌شود.');
-}
 
 function closeAnyModal(id: string): void { document.querySelector(`#${id}`)?.remove(); }
 
