@@ -16,7 +16,7 @@ ENV PORT=8080
 ENV JWT_SECRET=
 
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY database ./database
@@ -27,5 +27,6 @@ EXPOSE 8080
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
   CMD node -e "fetch('http://localhost:8080/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-# پیش‌فرض: اجرای بدونِ کلیدِ عملیاتی؛ برای استفاده‌ی واقعی JWT_SECRET را تنظیم کنید
-CMD ["node", "--experimental-strip-types", "server/index.ts"]
+# اجرای سرور با tsx (وابستگیِ اجرایی؛ importهای «.js» به فایل‌های «.ts» را درست حل می‌کند)
+# اگر JWT_SECRET تنظیم نشود، سرور خودش یک کلیدِ پایدار در /app/.data می‌سازد
+CMD ["node", "--import", "tsx", "server/index.ts"]

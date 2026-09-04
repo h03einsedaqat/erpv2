@@ -58,7 +58,7 @@ const corsHeadersFor = (request: IncomingMessage): Record<string, string> => {
     'Access-Control-Allow-Origin': allowed,
     Vary: 'Origin',
     'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Organization-Id',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Auth-Token, X-Organization-Id, X-Org-Id',
     'Access-Control-Max-Age': '600',
   };
 };
@@ -211,12 +211,67 @@ const fail = (result: ServerResponse, message: string, status = 400, code?: stri
 const requestedOrganization = (request: IncomingMessage): string => {
   const payload = authenticate(request);
   if (payload) return resolveOrganization(request, payload);
-  const requested = String(request.headers['x-organization-id'] ?? '').trim();
+  const requested = String(request.headers['x-organization-id'] ?? request.headers['x-org-id'] ?? '').trim();
   return requested || 'org-default';
 };
 
+/**
+ * توکنِ دسترسیِ درخواست را از هر جایی که رسیده باشد برمی‌دارد.
+ * چرا چند مسیر؟ برخی پروکسی‌ها/CDNها (مانند پیش‌نمایشِ Cloudflare/e2b و بعضی
+ * تونل‌ها) هدرِ استانداردِ Authorization را از درخواست حذف می‌کنند؛ در این حالت
+ * کاربر با رمزِ درست وارد می‌شد اما همه‌ی درخواست‌های بعدی ۴۰۱ می‌گرفتند و برنامه
+ * سه ثانیه بعد از داشبورد بیرون می‌افتاد. برای این‌که اتصال به زیرساخت وابسته نباشد:
+ *   ۱) Authorization: Bearer …           (استاندارد)
+ *   ۲) X-Auth-Token: …                     (هدرِ اختصاصی؛ پروکسی‌ها به آن دست نمی‌زنند)
+ *   ۳) کوکیِ rahkar_token (SameSite=Strict) (مسیرِ پشتیبان برای همان مبدأ)
+ */
+/** نامِ کوکیِ نشست و عمرِ توکن‌ها (نشست ۳۰ روزه؛ توکنِ دسترسی بی‌صدا تازه می‌شود) */
+const SESSION_COOKIE = 'rahkar_token';
+const ACCESS_TTL_SECONDS = 24 * 60 * 60;
+const REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
+function cookieValue(request: IncomingMessage, name: string): string | null {
+  const raw = String(request.headers.cookie ?? '');
+  for (const part of raw.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() === name) {
+      try { return decodeURIComponent(part.slice(separator + 1).trim()); } catch { return part.slice(separator + 1).trim(); }
+    }
+  }
+  return null;
+}
+const authDebug = process.env.AUTH_DEBUG === '1';
+function requestToken(request: IncomingMessage): string | null {
+  const bearer = bearerToken(request.headers.authorization);
+  const custom = String(request.headers['x-auth-token'] ?? '').trim();
+  const cookie = cookieValue(request, SESSION_COOKIE);
+  if (authDebug) console.log(`[auth-debug] ${request.method} ${request.url} bearer=${bearer ? 'yes' : 'no'} x-auth-token=${custom ? 'yes' : 'no'} cookie=${cookie ? 'yes' : 'no'}`);
+  if (bearer) return bearer;
+  if (custom) return custom;
+  // کوکی فقط برای درخواست‌های هم‌مبدأ پذیرفته می‌شود (سدِ CSRF علاوه بر SameSite=Strict)
+  const origin = String(request.headers.origin ?? '');
+  if (origin) {
+    try {
+      if (new URL(origin).host !== String(request.headers.host ?? '')) return null;
+    } catch { return null; }
+  }
+  return cookie;
+}
+
+const isSecureRequest = (request: IncomingMessage): boolean =>
+  String(request.headers['x-forwarded-proto'] ?? '').split(',')[0].trim() === 'https' || Boolean((request.socket as { encrypted?: boolean }).encrypted);
+/** پاسخِ ورود/تازه‌سازی: توکن در بدنه + همان توکن در کوکیِ HttpOnly به‌عنوان مسیرِ پشتیبان */
+function sessionResponse(request: IncomingMessage, payload: unknown, token: string | null): Outgoing {
+  const base = response(payload);
+  const attributes = [`Path=/api`, 'HttpOnly', 'SameSite=Strict', isSecureRequest(request) ? 'Secure' : ''].filter(Boolean).join('; ');
+  const cookie = token
+    ? `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${ACCESS_TTL_SECONDS}; ${attributes}`
+    : `${SESSION_COOKIE}=; Max-Age=0; ${attributes}`;
+  return { ...base, headers: { ...base.headers, 'Set-Cookie': cookie } };
+}
+
 const authenticate = (request: IncomingMessage): TokenPayload | null => {
-  const token = bearerToken(request.headers.authorization);
+  const token = requestToken(request);
   return token ? verifyToken(token) : null;
 };
 
@@ -234,7 +289,7 @@ const authorize = (request: IncomingMessage, result: ServerResponse, permission:
  */
 const resolveOrganization = (request: IncomingMessage, payload: TokenPayload): string => {
   const memberships = storeListMembershipsSync(payload.sub);
-  const requested = String(request.headers['x-organization-id'] ?? '').trim();
+  const requested = String(request.headers['x-organization-id'] ?? request.headers['x-org-id'] ?? '').trim();
   if (requested && memberships.some((row) => row.organizationId === requested)) return requested;
   return memberships.find((row) => row.isDefault)?.organizationId ?? memberships[0]?.organizationId ?? '';
 };
@@ -393,17 +448,17 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
         return;
       }
       const claims = { sub: user.id, username: user.username, displayName: user.displayName, role: user.role };
-      const token = signToken(claims, 12 * 60 * 60);
-      const refreshTtl = 7 * 24 * 60 * 60;
+      const token = signToken(claims, ACCESS_TTL_SECONDS);
+      const refreshTtl = REFRESH_TTL_SECONDS;
       const refreshToken = signRefreshToken(claims, refreshTtl);
       store.addRefreshToken({ userId: user.id, username: user.username, token: refreshToken, ttlSeconds: refreshTtl, fingerprint: deviceFingerprint(request) });
       await store.persistRefreshTokens();
       await store.setUserLastLogin(user.id);
       await store.recordAudit({ actor: user.username, action: 'login.google', entity: 'user', entityId: user.id }).catch(() => undefined);
-      send(result, response({
+      send(result, sessionResponse(request, {
         user: { id: user.id, username: user.username, name: user.displayName, role: roleTitle(user.role), roleId: user.role, permissions: permissionsOf(user.role), organization: organizationName },
         token, refreshToken,
-      }));
+      }, token));
       return;
     }
 
@@ -429,17 +484,19 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
         return;
       }
       const claims = { sub: user.id, username: user.username, displayName: user.displayName, role: user.role };
-      const token = signToken(claims, 12 * 60 * 60);
-      const refreshTtl = input.remember ? 30 * 24 * 60 * 60 : 7 * 24 * 60 * 60;
+      const token = signToken(claims, ACCESS_TTL_SECONDS);
+      // نشست همیشه ۳۰ روزه است؛ «مرا به خاطر بسپار» فقط محلِ نگه‌داری در مرورگر را تعیین می‌کند
+      void input.remember;
+      const refreshTtl = REFRESH_TTL_SECONDS;
       const refreshToken = signRefreshToken(claims, refreshTtl);
       store.addRefreshToken({ userId: user.id, username: user.username, token: refreshToken, ttlSeconds: refreshTtl, fingerprint: deviceFingerprint(request) });
       await store.persistRefreshTokens();
       await store.setUserLastLogin(user.id);
       await store.recordAudit({ actor: user.username, action: 'login', entity: 'user', entityId: user.id });
-      send(result, response({
+      send(result, sessionResponse(request, {
         user: { id: user.id, username: user.username, name: user.displayName, role: roleTitle(user.role), roleId: user.role, permissions: permissionsOf(user.role), organization: organizationName },
         token, refreshToken,
-      }));
+      }, token));
       return;
     }
 
@@ -452,7 +509,7 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
       const user = await store.findUser(claims.username);
       if (!user || !user.isActive) { fail(result, 'کاربر غیرفعال است', 401); return; }
       const fresh = { sub: user.id, username: user.username, displayName: user.displayName, role: user.role };
-      const refreshTtl = 30 * 24 * 60 * 60;
+      const refreshTtl = REFRESH_TTL_SECONDS;
       /**
        * اثرِ دستگاه (نشانی + مرورگر) کمک می‌کند استفاده‌ی دوباره‌ی «خودِ کاربر» در چند تب،
        * با استفاده‌ی غیرمجازِ یک دستگاهِ دیگر اشتباه گرفته نشود.
@@ -488,22 +545,24 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
           });
           await store.persistRefreshTokens();
           await store.recordAudit({ actor: claims.username, action: 'session_restored', entity: 'session', detail: 'نشست پس از پاک شدنِ پایگاه داده بازیابی شد' });
-          send(result, response({
+          const restoredAccess = signToken(fresh, ACCESS_TTL_SECONDS);
+          send(result, sessionResponse(request, {
             user: { id: user.id, username: user.username, name: user.displayName, role: roleTitle(user.role), roleId: user.role, permissions: permissionsOf(user.role), organization: organizationName },
-            token: signToken(fresh, 12 * 60 * 60),
+            token: restoredAccess,
             refreshToken: restoredToken,
-          }));
+          }, restoredAccess));
           return;
         }
         fail(result, 'نشست منقضی شده است؛ دوباره وارد شوید', 401, 'AUTH_REQUIRED');
         return;
       }
       await store.persistRefreshTokens();
-      send(result, response({
+      const rotatedAccess = signToken(fresh, ACCESS_TTL_SECONDS);
+      send(result, sessionResponse(request, {
         user: { id: user.id, username: user.username, name: user.displayName, role: roleTitle(user.role), roleId: user.role, permissions: permissionsOf(user.role), organization: organizationName },
-        token: signToken(fresh, 12 * 60 * 60),
+        token: rotatedAccess,
         refreshToken: rotation.token,
-      }));
+      }, rotatedAccess));
       return;
     }
 
@@ -516,7 +575,7 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
       if (input.everywhere && payload) revoked += store.revokeUserRefreshTokens(payload.sub);
       await store.persistRefreshTokens();
       if (payload) await store.recordAudit({ actor: payload.username, action: 'logout', entity: 'user', entityId: payload.sub, detail: `${revoked} نشست` });
-      send(result, response({ data: { revoked } }));
+      send(result, sessionResponse(request, { data: { revoked } }, null));
       return;
     }
 
@@ -685,6 +744,37 @@ const server = createServer((request: IncomingMessage, result: ServerResponse) =
       return;
     }
 
+
+    /* ------------------------------ فضای کاری ------------------------------ */
+
+    /**
+     * فضای کاریِ شرکت: داده‌های ماژول‌ها (فاکتور، سفارش، کالا، کارمند، سرنخ، بودجه، …).
+     * پیش‌تر این داده‌ها فقط در حافظه‌ی مرورگر می‌ماند و با پاک شدنِ مرورگر از بین می‌رفت؛
+     * اکنون نسخه‌ی مرجع روی سرور نگه داشته می‌شود و هر تغییرِ کاربر بلافاصله اینجا ذخیره می‌گردد.
+     */
+    if (path === '/api/workspace' && request.method === 'GET') {
+      const payload = authorize(request, result, 'events.read');
+      if (!payload) return;
+      const organizationId = resolveOrganization(request, payload);
+      const workspace = await store.getWorkspace(organizationId);
+      send(result, response({ organizationId, entries: workspace?.entries ?? {}, updatedAt: workspace?.updatedAt ?? null }));
+      return;
+    }
+    if (path === '/api/workspace' && (request.method === 'PUT' || request.method === 'POST')) {
+      const payload = authorize(request, result, 'events.write');
+      if (!payload) return;
+      const input = await readJsonBody<{ entries?: Record<string, unknown> }>(request, result);
+      if (!input) return;
+      const entries = input.entries && typeof input.entries === 'object' && !Array.isArray(input.entries) ? input.entries : null;
+      if (!entries) { fail(result, 'ساختارِ داده‌ی فضای کاری معتبر نیست'); return; }
+      const allowed = Object.fromEntries(Object.entries(entries).filter(([key]) => /^erp-[a-z-]{2,40}$/.test(key)));
+      if (!Object.keys(allowed).length) { fail(result, 'هیچ کلیدِ معتبری برای ذخیره فرستاده نشده است'); return; }
+      try {
+        const saved = await store.saveWorkspaceEntries(resolveOrganization(request, payload), allowed, payload.username);
+        send(result, response({ ok: true, updatedAt: saved.updatedAt, keys: Object.keys(allowed) }));
+      } catch (error) { fail(result, error instanceof Error ? error.message : 'ذخیره‌ی فضای کاری ناموفق بود'); }
+      return;
+    }
 
     /* ------------------------------ رویدادها ------------------------------ */
 

@@ -1,10 +1,10 @@
 /**
- * رفتارِ برنامه هنگامی که سرور نشست را نمی‌پذیرد (۴۰۱ِ پیاپی).
+ * رفتارِ برنامه هنگامی که سرور در میانه‌ی کار نشست را نمی‌پذیرد (۴۰۱ِ پیاپی؛
+ * مثلاً سرویس با کلیدِ تازه راه‌اندازی شده است).
  * انتظار:
- *  ۱) پس از چند تلاشِ ناموفق، برنامه درخواستِ بی‌حاصل نمی‌فرستد (کنسول پر از ۴۰۱ نمی‌شود)
- *  ۲) برنامه در دسترس و قابلِ استفاده می‌ماند (حالت محلی)
- *  ۳) نشانگر، حالتِ محلی را نشان می‌دهد
- *  ۴) با کلیک روی نشانگر، دوباره تلاش می‌شود
+ *  ۱) برنامه به «حالت محلی» نمی‌رود؛ کاربر به صفحه‌ی ورود برمی‌گردد
+ *  ۲) درخواستِ بی‌حاصل تکرار نمی‌شود (کنسول پر از ۴۰۱ نمی‌شود)
+ *  ۳) با ورودِ دوباره، اتصال و بارگذاریِ داده از سرور برقرار می‌شود
  */
 import { readFileSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
@@ -26,13 +26,13 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://localhost:
 const { window } = dom;
 const doc = window.document;
 
-// سروری که ورود را می‌پذیرد تا برنامه بالا بیاید، اما بقیه‌ی درخواست‌ها ۴۰۱ می‌دهند
+// سروری که ورود را می‌پذیرد تا برنامه بالا بیاید، اما بعداً همه‌ی درخواست‌ها را ۴۰۱ می‌دهد
 let calls = 0;
 let rejectAll = false;
 window.fetch = async (input, init) => {
   const path = String(input);
   calls += 1;
-  if (rejectAll && !path.includes('/api/health')) {
+  if (rejectAll && !path.includes('/api/health') && !path.includes('/api/auth/login') && !path.includes('/api/auth/config')) {
     return new Response(JSON.stringify({ error: 'نشست معتبر نیست', code: 'AUTH_REQUIRED' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
   return fetch(new URL(path, 'http://localhost:8080/'), init);
@@ -52,24 +52,26 @@ check('ورودِ نخست انجام می‌شود', /متصل/.test(doc.queryS
 
 // از این لحظه سرور همه‌چیز را ۴۰۱ می‌دهد
 rejectAll = true;
-// بررسیِ وضعیت را (مانندِ بازگشت به تب) راه می‌اندازیم تا برنامه با خطا روبه‌رو شود
+doc.dispatchEvent(new window.Event('visibilitychange', { bubbles: true }));
+await wait(3000);
+check('کاربر به صفحه‌ی ورود برمی‌گردد (نه حالتِ محلی)', Boolean(doc.querySelector('#login-form')), doc.querySelector('#api-chip')?.textContent?.trim() ?? 'بدون نشانگر');
+check('نشانه‌های نشستِ نامعتبر پاک شده‌اند', !window.localStorage.getItem('erp-token-v2'));
+
+calls = 0;
 for (let i = 0; i < 3; i += 1) {
   doc.dispatchEvent(new window.Event('visibilitychange', { bubbles: true }));
-  await wait(2500);
+  await wait(1500);
 }
-calls = 0;
-await wait(6000);                       // آیا برنامه دست از درخواستِ بی‌حاصل می‌کشد؟
-const duringFault = calls;
-check('برنامه پس از چند تلاش، درخواستِ بی‌حاصل نمی‌فرستد', duringFault <= 12, `${duringFault} درخواست در ۹ ثانیه`);
-check('نشانگر حالتِ محلی را نشان می‌دهد', /محلی|اتصال|سرویس/.test(doc.querySelector('#api-chip')?.textContent ?? ''), doc.querySelector('#api-chip')?.textContent?.trim());
-check('برنامه در دسترس است (منوها پابرجا)', doc.querySelectorAll('[data-module]').length > 0, `${doc.querySelectorAll('[data-module]').length} ماژول`);
-check('داده‌ای برای کار وجود دارد (نمونه در حالتِ محلی)', (doc.querySelector('#app')?.textContent ?? '').trim().length > 200);
+check('پس از پایانِ نشست درخواستِ بی‌حاصل تکرار نمی‌شود', calls <= 6, `${calls} درخواست در ۴٫۵ ثانیه`);
 
-// کلیک روی نشانگر یعنی «دوباره امتحان کن»
-calls = 0;
-doc.querySelector('#api-chip')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-await wait(2500);
-check('با کلیک روی نشانگر دوباره تلاش می‌شود', calls > 0, `${calls} درخواست`);
+// ورودِ دوباره: سرور دوباره سالم است
+rejectAll = false;
+doc.querySelector('#username').value = 'admin';
+doc.querySelector('#password').value = 'admin123';
+doc.querySelector('#login-form')?.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+await wait(4000);
+check('با ورودِ دوباره اتصال برقرار می‌شود', /متصل/.test(doc.querySelector('#api-chip')?.textContent ?? ''), doc.querySelector('#api-chip')?.textContent?.trim());
+check('برنامه در دسترس است (منوها پابرجا)', doc.querySelectorAll('[data-module]').length > 0, `${doc.querySelectorAll('[data-module]').length} ماژول`);
 
 console.log(`\nنتیجه: ${failures ? `${failures} مورد ناموفق` : 'همه‌ی بررسی‌ها موفق'}`);
 process.exit(failures ? 1 : 0);
