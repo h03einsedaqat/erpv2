@@ -652,112 +652,6 @@ function seedDemoData(): void {
   localStorage.setItem(scopedKey('erp-demo-seeded'), new Date().toISOString());
 }
 
-/* ===================== نصب روی دستگاه (PWA) ===================== */
-
-/** رویدادِ نصب که مرورگر پیش از نمایشِ پیشنهادِ خودکار صادر می‌کند */
-type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice?: Promise<{ outcome: 'accepted' | 'dismissed' }> };
-let deferredInstallPrompt: InstallPromptEvent | null = null;
-
-/** ثبتِ Service Worker برای کار بدون اینترنت (فقط در نسخه‌ی منتشرشده) */
-/**
- * نصب و به‌روزرسانیِ Service Worker.
- * نکته‌ی امنیتی/پایداری: همیشه نسخه‌ی تازه از شبکه گرفته می‌شود (updateViaCache: 'none')
- * و کارگرهای قدیمیِ ثبت‌شده لغو می‌گردند؛ یک کارگرِ کهنه می‌توانست پاسخ‌های ذخیره‌شده
- * (از جمله پاسخ‌های خطا) را تحویل دهد و باعث چرخه‌ی «متصل / عدم اتصال» شود.
- */
-function registerServiceWorker(): void {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-  if (!window.isSecureContext && location.hostname !== 'localhost') return;
-  const sync = (): void => {
-    navigator.serviceWorker
-      .register('./sw.js', { updateViaCache: 'none' })
-      .then(async (registration) => {
-        await registration.update().catch(() => undefined);
-        if (registration.waiting) registration.waiting.postMessage('skip-waiting');
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.filter((item) => item !== registration).map((item) => item.unregister().catch(() => undefined)));
-      })
-      .catch(() => undefined);
-  };
-  window.addEventListener('load', sync);
-  // وقتی کارگرِ تازه کنترل را گرفت، یک بار صفحه نو می‌شود تا دارایی‌های کهنه کنار بروند
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (sessionStorage.getItem('sw-reloaded')) return;
-    sessionStorage.setItem('sw-reloaded', '1');
-    window.location.reload();
-  });
-}
-
-/** پیشنهادِ نصبِ برنامه روی موبایل و دسکتاپ */
-function setupInstallPrompt(): void {
-  window.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event as InstallPromptEvent;
-    window.setTimeout(showInstallBanner, 4000);
-  });
-  window.addEventListener('appinstalled', () => {
-    deferredInstallPrompt = null;
-    hideInstallBanner();
-    showToast('راهکار روی دستگاه شما نصب شد. از این پس از صفحه‌ی اصلی اجرا کنید.');
-  });
-}
-
-/** نمایشِ بنرِ نصب (اگر قبلاً رد نشده باشد) */
-function showInstallBanner(): void {
-  if (!deferredInstallPrompt) return;
-  if (localStorage.getItem('erp-install-dismissed')) return;
-  if (document.querySelector('#install-banner') || document.querySelector('.app-shell')) return;
-  const banner = document.createElement('div');
-  banner.className = 'install-banner';
-  banner.id = 'install-banner';
-  banner.innerHTML = `<div class="install-banner-inner">
-      <span class="install-banner-icon">⬇</span>
-      <div class="install-banner-text"><strong>راهکار را روی دستگاه‌تان نصب کنید</strong><small>دسترسیِ سریع، کار بدون اینترنت و ظاهرِ برنامه‌ی مستقل</small></div>
-      <div class="install-banner-actions">
-        <button type="button" class="primary-button small" id="install-accept">نصب برنامه</button>
-        <button type="button" class="btn-cancel small" id="install-dismiss">بعداً</button>
-      </div>
-    </div>`;
-  document.body.appendChild(banner);
-  requestAnimationFrame(() => banner.classList.add('visible'));
-  banner.querySelector('#install-accept')?.addEventListener('click', () => void runInstallPrompt());
-  banner.querySelector('#install-dismiss')?.addEventListener('click', () => {
-    localStorage.setItem('erp-install-dismissed', new Date().toISOString());
-    hideInstallBanner();
-  });
-}
-
-function hideInstallBanner(): void {
-  const banner = document.querySelector('#install-banner');
-  if (!banner) return;
-  banner.classList.remove('visible');
-  window.setTimeout(() => banner.remove(), 350);
-}
-
-/** اجرایِ نصب یا نمایشِ راهنمایِ مخصوصِ آیفون */
-async function runInstallPrompt(): Promise<void> {
-  if (deferredInstallPrompt) {
-    const event = deferredInstallPrompt;
-    deferredInstallPrompt = null;
-    await event.prompt();
-    await event.userChoice?.catch(() => undefined);
-    hideInstallBanner();
-    return;
-  }
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  openModal('install-modal', 'install-form', `<p class="eyebrow">نصب برنامه</p><h2>نصب روی ${isIos ? 'آیفون و آیپد' : 'مرورگر شما'}</h2>
-    <p class="modal-hint">${isIos
-      ? 'در سافاری روی دکمه‌ی «اشتراک‌گذاری» (Share) بزنید، سپس «Add to Home Screen» یا «افزودن به صفحه‌ی اصلی» را انتخاب کنید.'
-      : 'از منوی سه‌نقطه‌ی بالای مرورگر، گزینه‌ی «Install app» یا «نصب برنامه» را انتخاب کنید. در مرورگرهای کروم و اج این گزینه در نوار آدرس هم دیده می‌شود.'}
-    </p>
-    <div class="status-table">
-      <div class="status-row"><span>کار بدون اینترنت</span><strong>فعال</strong></div>
-      <div class="status-row"><span>اجرای تمام‌صفحه</span><strong>فعال</strong></div>
-      <div class="status-row"><span>فضای مورد نیاز</span><strong>کمتر از ۵ مگابایت</strong></div>
-    </div>
-    <div class="modal-actions"><button type="button" class="btn-cancel" data-close="install-modal">بستن</button></div>`);
-}
-
 /** ظاهر شدنِ تدریجی و ملایمِ بخش‌ها هنگامِ اسکرول (صفحه‌ی اصلی) */
 function setupScrollReveal(): void {
   const targets = document.querySelectorAll<HTMLElement>('.reveal');
@@ -1096,7 +990,15 @@ window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => 
 /** پس از خروج یا پایانِ نشست، بازسازی‌های بعدی باید صفحه‌ی ورود را نشان دهند نه صفحه‌ی معرفی */
 let preferLoginScreen = false;
 function render(): void {
-  if (!session) { if (preferLoginScreen) renderLogin(); else renderLanding(); return; }
+  if (!session) {
+    if (preferLoginScreen) renderLogin();
+    else {
+      const guideId = moduleGuideIdFromLocation();
+      if (guideId) renderModuleGuide(guideId);
+      else renderLanding();
+    }
+    return;
+  }
   if (!renderAllowed()) return;
   // ماژولی که کاربر به آن دسترسی ندارد هرگز نمایش داده نمی‌شود
   // فقط زمانی به ماژول نخست برمی‌گردیم که کاربر واقعاً به آن دسترسی ندارد؛
@@ -1463,76 +1365,127 @@ function updateDashboardClock(): void {
   if (dateEl) dateEl.textContent = new Intl.DateTimeFormat('fa-IR', { weekday: 'short', day: 'numeric', month: 'long' }).format(now);
 }
 
-/**
- * دریافتِ فایلِ زیپِ سورس با یک کلیک — بی‌هیچ مرحله‌ی میانی.
- *
- * روند:
- *   ۱) بررسی با HEAD که فایل روی همین میزبان در دسترس است و اندازه دارد
- *   ۲) دریافتِ فایل در حافظه (با نمایشِ پیشرفت)
- *   ۳) ذخیره در پوشه‌ی دانلودِ مرورگر با نامِ فایلِ دلخواه
- * اگر پاسخ یک فایلِ زیپ نباشد (مثلاً میزبان صفحه‌ی HTML برگرداند)، هیچ فایلی
- * ذخیره نمی‌شود و پیامِ راهنما نشان داده می‌شود.
- */
-async function downloadSourceDirectly(button: HTMLButtonElement, note: HTMLElement | null): Promise<void> {
-  const url = new URL('source.zip', window.location.href).href;
-  const text = button.querySelector<HTMLElement>('.source-download-text');
-  const bar = button.querySelector<HTMLElement>('.source-download-bar');
-  const setLabel = (value: string) => { if (text) text.textContent = value; };
-  const setProgress = (ratio: number) => { if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, ratio))})`; };
-  const original = text?.textContent ?? '';
-  const finish = (label: string, noteText?: string, warn = false) => {
-    setLabel(label);
-    if (note && noteText) {
-      note.textContent = noteText;
-      note.classList.toggle('warn', warn);
-    }
-  };
-  const reset = (delay: number) => window.setTimeout(() => {
-    setLabel(original);
-    button.disabled = false;
-    button.classList.remove('busy');
-    setProgress(0);
-  }, delay);
 
-  button.disabled = true;
-  button.classList.add('busy');
-  setLabel('در حال دریافت…');
-  setProgress(0.08);
-  try {
-    const probe = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-    const type = (probe.headers.get('content-type') ?? '').toLowerCase();
-    const total = Number(probe.headers.get('content-length') ?? 0);
-    // اگر پاسخ یک فایلِ زیپ نباشد (مثلاً میزبان به‌جای فایل صفحه‌ی HTML بدهد)،
-    // هیچ چیز ذخیره نمی‌شود — تجربه‌ی «فایلِ html با نامِ zip» دیگر تکرار نمی‌شود
-    if (!probe.ok || !(type.includes('zip') || type.includes('octet-stream')) || total < 1000) {
-      finish('در این میزبان در دسترس نیست', 'این میزبان فایلِ زیپ را نمی‌دهد. نشانیِ زیر را مستقیم در مرورگر یا برنامه‌ی دانلود وارد کنید.', true);
-      reset(2600);
-      return;
-    }
-    const response = await fetch(url, { cache: 'no-store' });
-    const blob = await response.blob();
-    setProgress(0.9);
-    if (!blob.size || blob.type.includes('text/html')) {
-      finish('در این میزبان در دسترس نیست', 'پاسخِ میزبان یک صفحه بود، نه فایلِ زیپ. نشانیِ زیر را مستقیم امتحان کنید.', true);
-      reset(2600);
-      return;
-    }
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = 'راهکار-سورس.zip';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 4000);
-    setProgress(1);
-    finish('ذخیره شد ✓', `بسته‌ی سورس (${Math.round(blob.size / 1024)} کیلوبایت) در پوشه‌ی دانلودِ مرورگر ذخیره شد.`);
-    showToast('فایلِ زیپِ سورس ذخیره شد.');
-    reset(3200);
-  } catch {
-    finish('دریافت ناموفق بود', 'ارتباط برقرار نشد. نشانیِ زیر را مستقیم در مرورگر یا برنامه‌ی دانلود امتحان کنید.', true);
-    reset(2600);
-  }
+type ModuleGuide = {
+  summary: string;
+  what: string;
+  value: string;
+  example: string;
+  outcome: string;
+  flow: string[];
+};
+
+/** توضیح‌های ساده برای آشنایی نخستین کاربر با هر ماژول */
+const moduleGuides: Record<string, ModuleGuide> = {
+  identity: { summary: 'مشخص می‌کند چه کسی به کدام بخش‌ها دسترسی دارد.', what: 'این بخش برای ساختن حساب کاربری همکاران و تعیین سطح دسترسی آن‌هاست.', value: 'هر شخص فقط اطلاعات و دکمه‌هایی را می‌بیند که برای انجام کارش لازم دارد؛ بنابراین کارها امن‌تر و مرتب‌تر می‌مانند.', example: 'مثلاً انباردار موجودی را می‌بیند، اما امکان تغییر اطلاعات حقوق را ندارد.', outcome: 'تیم با دسترسی روشن و قابل پیگیری کار می‌کند.', flow: ['ساخت حساب همکار', 'انتخاب نقش و دسترسی', 'ورود امن کاربر', 'ثبت فعالیت‌ها'] },
+  organization: { summary: 'شناسنامه شرکت، شعبه‌ها و زمان‌بندی مالی را یک‌جا نگه می‌دارد.', what: 'در این بخش مشخص می‌کنید سازمان شما چه شرکت‌ها، شعبه‌ها، پروژه‌ها و دوره‌های مالی دارد.', value: 'همه بخش‌های برنامه از همین اطلاعات مشترک استفاده می‌کنند تا هر گزارش متعلق به شرکت و زمان درست باشد.', example: 'می‌توانید شعبه تهران و شیراز را جدا ببینید، اما در گزارش کل گروه کنار هم داشته باشید.', outcome: 'ساختار سازمان همیشه شفاف و آماده گزارش‌گیری است.', flow: ['تعریف شرکت و شعبه', 'مشخص کردن سال مالی', 'ساخت مراکز هزینه', 'استفاده مشترک همه ماژول‌ها'] },
+  workflow: { summary: 'کارها را به ترتیب درست به نفر بعدی می‌رساند.', what: 'گردش کار مسیر انجام یک درخواست را مشخص می‌کند؛ از ثبت درخواست تا تأیید و پایان آن.', value: 'هیچ درخواست مهمی بین پیام‌ها و تماس‌ها گم نمی‌شود و هر نفر می‌داند چه زمانی باید اقدام کند.', example: 'درخواست خرید ابتدا توسط مسئول واحد ثبت می‌شود، سپس مدیر تأیید می‌کند و برای خرید ارسال می‌شود.', outcome: 'مسئول هر گام و وضعیت هر کار همیشه معلوم است.', flow: ['ثبت درخواست', 'ارسال برای مسئول', 'تأیید یا اصلاح', 'ثبت نتیجه و اطلاع‌رسانی'] },
+  integration: { summary: 'اطلاعات راهکار را با سامانه‌های دیگر هماهنگ می‌کند.', what: 'این بخش مسیر ارتباط راهکار با بانک، سامانه مالیاتی یا نرم‌افزارهای دیگر سازمان است.', value: 'به‌جای ورود دوباره اطلاعات، داده‌ها یک‌بار ثبت می‌شوند و بین سامانه‌های مجاز جابه‌جا می‌شوند.', example: 'وضعیت یک پرداخت بانکی می‌تواند مستقیم در خزانه‌داری دیده شود.', outcome: 'اطلاعات یکپارچه‌تر و خطاهای ورود دستی کمتر می‌شود.', flow: ['انتخاب سامانه مقصد', 'تنظیم ارتباط امن', 'ارسال یا دریافت اطلاعات', 'بررسی وضعیت و خطاها'] },
+  accounting: { summary: 'رویدادهای مالی را به گزارش‌های قابل اعتماد تبدیل می‌کند.', what: 'مالی و حسابداری محل ثبت و مرتب‌سازی همه اتفاق‌های مالی سازمان است؛ مثل فروش، خرید و هزینه‌ها.', value: 'مدیر و حسابدار در هر زمان می‌توانند تصویر روشنی از درآمد، هزینه، بدهی و مانده حساب‌ها داشته باشند.', example: 'وقتی فاکتور فروش ثبت می‌شود، اثر مالی آن در حساب‌ها قابل پیگیری خواهد بود.', outcome: 'گزارش‌های مالی منظم برای تصمیم‌گیری و پایان سال آماده است.', flow: ['ثبت رویداد مالی', 'ساخت یا ثبت سند', 'کنترل بدهکار و بستانکار', 'گزارش‌گیری و بستن دوره'] },
+  treasury: { summary: 'ورود و خروج پول، بانک و چک‌ها را کنترل می‌کند.', what: 'خزانه‌داری برای دیدن پول موجود، پرداخت‌ها، دریافت‌ها و تعهدات نزدیک سازمان است.', value: 'پیش از پرداخت یا برنامه‌ریزی خرید، می‌دانید چه مقدار پول در دسترس است و چه مبلغی در راه است.', example: 'می‌توانید ببینید کدام چک‌ها سررسید دارند و چه دریافت‌هایی هنوز انجام نشده‌اند.', outcome: 'تصمیم‌های نقدی با دید روشن‌تر گرفته می‌شوند.', flow: ['ثبت دریافت یا پرداخت', 'انتخاب بانک یا صندوق', 'پیگیری چک و سررسید', 'نمایش مانده و پیش‌بینی'] },
+  sales: { summary: 'فروش را از درخواست مشتری تا دریافت وجه دنبال می‌کند.', what: 'این بخش مراحل فروش کالا یا خدمت به مشتری را در یک مسیر ساده نگه می‌دارد.', value: 'تیم فروش می‌داند هر مشتری در چه مرحله‌ای است و چه سفارش یا فاکتوری نیاز به پیگیری دارد.', example: 'برای یک مشتری ابتدا پیش‌فاکتور، سپس سفارش، ارسال کالا و در پایان فاکتور ثبت می‌شود.', outcome: 'فرصت فروش کمتر فراموش می‌شود و وصول مطالبات منظم‌تر است.', flow: ['ثبت درخواست مشتری', 'ساخت پیش‌فاکتور یا سفارش', 'ارسال کالا یا خدمت', 'صدور فاکتور و پیگیری دریافت'] },
+  purchasing: { summary: 'خرید کالا و خدمات را شفاف و قابل مقایسه می‌کند.', what: 'خرید و تدارکات مسیر نیاز داخلی تا سفارش دادن به تأمین‌کننده را مدیریت می‌کند.', value: 'قبل از خرید می‌توانید پیشنهادها را مقایسه و هزینه‌ها را کنترل کنید.', example: 'واحد تولید نیاز به مواد اولیه را ثبت می‌کند و مسئول خرید از چند تأمین‌کننده قیمت می‌گیرد.', outcome: 'خریدها با دلیل روشن، تأیید مناسب و سابقه کامل انجام می‌شوند.', flow: ['ثبت نیاز خرید', 'دریافت و مقایسه قیمت', 'تأیید و ثبت سفارش', 'تحویل کالا یا خدمت'] },
+  inventory: { summary: 'به شما می‌گوید چه کالایی، کجا و به چه تعداد دارید.', what: 'انبار و لجستیک برای ثبت کالاها و حرکت آن‌ها بین انبار، تولید، فروش و شمارش است.', value: 'از کمبود ناگهانی یا خرید اضافه جلوگیری می‌شود و محل هر کالا قابل پیگیری است.', example: 'با رسید خرید، موجودی زیاد می‌شود و با تحویل سفارش فروش، همان موجودی کم می‌شود.', outcome: 'موجودی واقعی و قابل اعتماد در اختیار تیم است.', flow: ['تعریف کالا و انبار', 'ثبت رسید یا حواله', 'کنترل حداقل موجودی', 'شمارش و گزارش موجودی'] },
+  payroll: { summary: 'حقوق هر همکار را با کارکرد و کسورات محاسبه می‌کند.', what: 'حقوق و دستمزد اطلاعات کارکرد، اضافه‌کاری، مرخصی، بیمه و مالیات را برای پرداخت حقوق کنار هم می‌گذارد.', value: 'محاسبه حقوق منظم‌تر می‌شود و هر پرداخت سابقه مشخصی دارد.', example: 'پس از ثبت کارکرد ماهانه، فیش حقوقی هر کارمند آماده بررسی و پرداخت می‌شود.', outcome: 'پرداخت حقوق به‌موقع و با خطای کمتر انجام می‌شود.', flow: ['ثبت اطلاعات پرسنل', 'ثبت کارکرد و تغییرات', 'محاسبه حقوق و کسورات', 'تأیید و پرداخت فیش'] },
+  hr: { summary: 'اطلاعات و مسیر همکاری کارکنان را سامان می‌دهد.', what: 'منابع انسانی برای مدیریت اطلاعات کارکنان از جذب تا آموزش، ارزیابی و مرخصی است.', value: 'واحد منابع انسانی به‌جای فایل‌ها و پیگیری‌های پراکنده، یک پرونده روشن برای هر همکار دارد.', example: 'درخواست مرخصی ثبت می‌شود، برای مدیر می‌رود و نتیجه آن در پرونده کارمند می‌ماند.', outcome: 'تجربه کارکنان و تصمیم‌های منابع انسانی بهتر مدیریت می‌شود.', flow: ['جذب یا ثبت همکار', 'تکمیل پرونده و قرارداد', 'مدیریت کارکرد و درخواست‌ها', 'ارزیابی و توسعه'] },
+  'fixed-assets': { summary: 'اموال ماندگار سازمان، مانند دستگاه و خودرو را پیگیری می‌کند.', what: 'دارایی ثابت برای ثبت چیزهایی است که سازمان می‌خرد و سال‌ها از آن‌ها استفاده می‌کند؛ مثل ماشین‌آلات، خودرو و تجهیزات.', value: 'می‌دانید هر دارایی کجاست، مسئولش کیست و ارزش آن در طول زمان چقدر تغییر کرده است.', example: 'پس از خرید یک دستگاه، محل استقرار و عمر مفیدش ثبت می‌شود و هزینه استفاده از آن به‌تدریج محاسبه می‌گردد.', outcome: 'فهرست اموال و ارزش مالی آن‌ها همیشه قابل اتکاست.', flow: ['ثبت دارایی جدید', 'تعیین محل و مسئول', 'محاسبه کاهش ارزش دوره‌ای', 'تعمیر، انتقال یا خروج از سازمان'] },
+  manufacturing: { summary: 'تبدیل مواد اولیه به محصول را مرحله‌به‌مرحله نشان می‌دهد.', what: 'تولید برای برنامه‌ریزی سفارش‌ها، مواد لازم، اجرای کار و کنترل نتیجه تولید است.', value: 'پیش از شروع کار می‌دانید چه موادی لازم است، چه تعداد باید تولید شود و هزینه تقریبی چقدر است.', example: 'برای ساخت یک محصول، فهرست مواد، مقدار تولید و هزینه نیروی کار ثبت می‌شود.', outcome: 'تولید قابل برنامه‌ریزی‌تر و هزینه‌ها قابل کنترل‌تر می‌شود.', flow: ['تعریف محصول و مواد لازم', 'برنامه‌ریزی سفارش تولید', 'ثبت مصرف و انجام کار', 'کنترل کیفیت و هزینه نهایی'] },
+  budget: { summary: 'برنامه مالی سازمان را با عملکرد واقعی مقایسه می‌کند.', what: 'بودجه و کنترل مدیریت برای تعیین برنامه هزینه و درآمد، سپس مقایسه آن با اتفاق‌های واقعی است.', value: 'مدیر زودتر متوجه می‌شود کدام واحد یا پروژه بیش از برنامه هزینه کرده یا از هدف عقب مانده است.', example: 'بودجه تبلیغات را ثبت می‌کنید و در طول ماه، هزینه واقعی را کنار آن می‌بینید.', outcome: 'تصمیم‌ها بر پایه فاصله برنامه و واقعیت گرفته می‌شوند.', flow: ['ثبت هدف و بودجه', 'اتصال هزینه و درآمد واقعی', 'دیدن اختلاف‌ها', 'اصلاح برنامه یا اقدام مدیریتی'] },
+  crm: { summary: 'رابطه با مشتری را از اولین تماس تا پشتیبانی نگه می‌دارد.', what: 'CRM همه اطلاعات مشتری، فرصت فروش، پیگیری‌ها و درخواست‌های پشتیبانی را در یک جا جمع می‌کند.', value: 'هیچ تماس یا درخواست مشتری بی‌پاسخ نمی‌ماند و سابقه ارتباط برای همه اعضای تیم روشن است.', example: 'وقتی مشتری تیکت ثبت می‌کند، مسئول رسیدگی، اولویت و وضعیت پاسخ آن مشخص است.', outcome: 'فروش پیگیرتر و تجربه مشتری بهتر می‌شود.', flow: ['ثبت مشتری یا سرنخ', 'پیگیری تماس و فرصت', 'تبدیل به فروش یا قرارداد', 'پاسخ‌گویی و سنجش رضایت'] },
+  reporting: { summary: 'داده‌های روزانه را به تصویر قابل فهم برای تصمیم‌گیری تبدیل می‌کند.', what: 'گزارش‌گیری و BI برای دیدن روندها، مقایسه‌ها و پاسخ به پرسش‌های مدیریتی از روی اطلاعات ثبت‌شده است.', value: 'به‌جای جست‌وجو در چند جدول، در یک صفحه می‌بینید چه چیزی رشد کرده، کجا نیاز به توجه دارد و چرا.', example: 'مدیر می‌تواند فروش ماه‌های اخیر، پرداخت‌ها یا وضعیت موجودی را کنار هم بررسی کند.', outcome: 'تصمیم‌ها سریع‌تر و بر پایه داده‌های واقعی گرفته می‌شوند.', flow: ['انتخاب موضوع گزارش', 'فیلتر کردن اطلاعات لازم', 'دیدن جدول و نمودار', 'اشتراک‌گذاری نتیجه با تیم'] },
+};
+
+function moduleGuideIdFromLocation(): string | null {
+  const match = window.location.hash.match(/^#modules\/([\w-]+)$/);
+  const id = match?.[1] ?? '';
+  return moduleGuides[id] ? id : null;
+}
+
+function publicPath(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+function openModuleGuide(moduleId: string): void {
+  if (!moduleGuides[moduleId]) return;
+  window.history.pushState({ moduleGuide: moduleId }, '', `${publicPath()}#modules/${moduleId}`);
+  renderModuleGuide(moduleId);
+}
+
+function returnToLanding(): void {
+  window.history.pushState({ landing: true }, '', publicPath());
+  renderLanding();
+}
+
+function renderModuleGuide(moduleId: string): void {
+  const app = document.querySelector<HTMLDivElement>('#app');
+  const module = moduleData.find((item) => item.id === moduleId);
+  const guide = moduleGuides[moduleId];
+  if (!app || !module || !guide) { renderLanding(); return; }
+  preferLoginScreen = false;
+  closeAllModals();
+  const related = moduleData.filter((item) => item.id !== moduleId).slice(0, 4);
+  app.innerHTML = `<main class="module-guide-page">
+    <header class="guide-nav">
+      <button class="guide-brand" id="guide-home" type="button" aria-label="بازگشت به صفحه اصلی"><span class="brand-mark">ر</span><span>راهکار</span></button>
+      <div class="guide-nav-actions"><button class="guide-back" id="guide-back" type="button">← همه ماژول‌ها</button><button class="primary-button small" id="guide-login" type="button">ورود به سامانه</button></div>
+    </header>
+    <section class="guide-hero">
+      <div class="guide-hero-copy"><span class="guide-kicker"><i>${module.icon}</i> آشنایی با ماژول</span><h1>${module.label}</h1><p>${guide.summary}</p><div class="guide-hero-note"><span>برای چه کسی مفید است؟</span><strong>${guide.value}</strong></div></div>
+      <div class="guide-symbol" aria-hidden="true"><span>${module.icon}</span><i></i><i></i><i></i></div>
+    </section>
+    <section class="guide-content">
+      <article class="guide-card guide-intro"><span class="guide-card-number">۰۱</span><h2>${module.label} چیست؟</h2><p>${guide.what}</p><div class="guide-example"><span>یک مثال ساده</span><p>${guide.example}</p></div></article>
+      <article class="guide-card guide-flow-card"><div class="guide-card-heading"><span class="guide-card-number">۰۲</span><div><h2>روند کار به زبان ساده</h2><p>با چند گام روشن، کار از ابتدا تا نتیجه قابل پیگیری است.</p></div></div><ol class="guide-flow">${guide.flow.map((step, index) => `<li><span>${(index + 1).toLocaleString('fa-IR').padStart(2, '۰')}</span><strong>${step}</strong>${index < guide.flow.length - 1 ? '<i aria-hidden="true">←</i>' : ''}</li>`).join('')}</ol></article>
+      <article class="guide-card guide-outcome"><span class="guide-card-number">۰۳</span><h2>نتیجه برای سازمان</h2><p>${guide.outcome}</p><ul>${module.features.slice(0, 6).map((feature) => `<li><span>✓</span>${feature}</li>`).join('')}</ul></article>
+    </section>
+    <section class="guide-more-section"><div><p class="eyebrow">ادامه آشنایی</p><h2>ماژول‌های دیگر را هم ببینید</h2></div><div class="guide-more-grid">${related.map((item) => `<button type="button" class="guide-more-card" data-module-guide="${item.id}"><span>${item.icon}</span><strong>${item.label}</strong><b>←</b></button>`).join('')}</div></section>
+    <section class="guide-cta"><div><span>آماده‌اید در عمل ببینید؟</span><h2>همه بخش‌ها در یک محیط هماهنگ کنار هم کار می‌کنند.</h2></div><button class="secondary-button" id="guide-start" type="button">شروع رایگان <span>←</span></button></section>
+    <footer class="guide-footer"><span>راهکار · سیستم یکپارچه برنامه‌ریزی سازمان</span><button type="button" id="guide-footer-home">بازگشت به صفحه اصلی</button></footer>
+  </main>`;
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  document.querySelector<HTMLButtonElement>('#guide-home')?.addEventListener('click', returnToLanding);
+  document.querySelector<HTMLButtonElement>('#guide-back')?.addEventListener('click', returnToLanding);
+  document.querySelector<HTMLButtonElement>('#guide-footer-home')?.addEventListener('click', returnToLanding);
+  document.querySelector<HTMLButtonElement>('#guide-login')?.addEventListener('click', renderLogin);
+  document.querySelector<HTMLButtonElement>('#guide-start')?.addEventListener('click', renderLogin);
+  document.querySelectorAll<HTMLButtonElement>('[data-module-guide]').forEach((button) =>
+    button.addEventListener('click', () => openModuleGuide(button.dataset.moduleGuide ?? '')),
+  );
+}
+
+window.addEventListener('popstate', () => {
+  if (session || preferLoginScreen || document.querySelector('.login-page-modern')) return;
+  const guideId = moduleGuideIdFromLocation();
+  if (guideId) renderModuleGuide(guideId);
+  else renderLanding();
+});
+
+function cashBalanceChartMarkup(): string {
+  const ordered = [...treasuryTransactions].sort((a, b) => {
+    const aTime = Date.parse(a.createdAt || '') || 0;
+    const bTime = Date.parse(b.createdAt || '') || 0;
+    return aTime - bTime;
+  });
+  let balance = 0;
+  const values = [0, ...ordered.map((item) => {
+    balance += item.transactionType === 'receipt' ? item.amount : -item.amount;
+    return balance;
+  })].slice(-8);
+  while (values.length < 4) values.unshift(values[0] ?? 0);
+  const width = 280;
+  const height = 64;
+  const padding = 7;
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = Math.max(1, maximum - minimum);
+  const points = values.map((value, index) => {
+    const x = padding + (index * (width - padding * 2)) / Math.max(1, values.length - 1);
+    const y = height - padding - ((value - minimum) / range) * (height - padding * 2);
+    return { x, y };
+  });
+  const line = points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+  const area = `${padding},${height - padding} ${line} ${width - padding},${height - padding}`;
+  return `<div class="cash-chart" role="img" aria-label="روند مانده نقدینگی بر اساس تراکنش‌های ثبت‌شده"><div class="cash-chart-label"><span>روند مانده</span><b>${ordered.length ? `${ordered.length} تراکنش اخیر` : 'بدون تراکنش'}</b></div><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="cash-chart-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d8d77" stop-opacity=".28"/><stop offset="1" stop-color="#1d8d77" stop-opacity=".02"/></linearGradient></defs><path class="cash-chart-area" d="M ${area} Z"/><polyline class="cash-chart-line" points="${line}"/>${points.map((point, index) => index === points.length - 1 ? `<circle class="cash-chart-dot" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="3.5"/>` : '').join('')}</svg></div>`;
 }
 
 function renderLanding(): void {
@@ -1563,9 +1516,6 @@ function renderLanding(): void {
         <button class="nav-link" data-scroll="contact" type="button">ارتباط با ما</button>
       </nav>
       <div class="landing-actions">
-        <a class="ghost-button source-download" id="landing-download-source" href="source.zip" download
-           type="application/zip" title="دریافتِ کلِ کدِ پروژه در یک فایلِ زیپ">⬇ دانلودِ سورسِ کامل</a>
-        <button class="ghost-button" id="landing-install" type="button">⬇ نصب برنامه</button>
         <button class="ghost-button" id="landing-login" type="button">ورود</button>
         <button class="primary-button small" id="landing-start" type="button">شروع رایگان</button>
       </div>
@@ -1580,10 +1530,7 @@ function renderLanding(): void {
           <div class="cta-row">
             <button class="primary-button" id="hero-start" type="button">شروع رایگان ۱۴ روزه</button>
             <button class="secondary-button" data-scroll="modules" type="button">مشاهده ماژول‌ها</button>
-            <a class="secondary-button source-download" id="hero-download-source" href="source.zip" download
-               type="application/zip" title="دریافتِ کلِ کدِ پروژه در یک فایلِ زیپ">⬇ دانلودِ سورسِ کامل</a>
           </div>
-          <p class="source-note">فایلِ زیپِ سورس (بدونِ کلید و داده‌ی زنده) با یک کلیک دانلود می‌شود.</p>
           <ul class="hero-stats">
             <li><strong>۱۶</strong><span>ماژول یکپارچه</span></li>
             <li><strong>۱۲۶+</strong><span>سازمان فعال</span></li>
@@ -1649,9 +1596,9 @@ function renderLanding(): void {
         </article>
         <article class="bento-card wide">
           <span class="bento-icon">🔒</span>
-          <h3>امنیت، نقش‌ها و کار بدون اینترنت</h3>
-          <p>نقش‌ها و مجوزهای دقیق، رمزنگاریِ نشست، ثبت رخدادهای حسابرسی، پشتیبان‌گیری و بازگردانی و نصب روی موبایل و دسکتاپ؛ کاربر فقط همان چیزی را می‌بیند که مجوز دارد.</p>
-          <ul><li>نقش و مجوز</li><li>لاگ حسابرسی</li><li>پشتیبان‌گیری</li><li>نصبِ PWA</li><li>بدون اینترنت</li></ul>
+          <h3>امنیت و کنترل دسترسی</h3>
+          <p>نقش‌ها و مجوزهای دقیق، رمزنگاریِ نشست، ثبت رخدادهای حسابرسی و پشتیبان‌گیری و بازگردانی؛ هر کاربر فقط همان چیزی را می‌بیند که مجوز دارد.</p>
+          <ul><li>نقش و مجوز</li><li>لاگ حسابرسی</li><li>پشتیبان‌گیری</li><li>کنترل دسترسی</li></ul>
         </article>
       </div>
     </section>
@@ -1662,23 +1609,16 @@ function renderLanding(): void {
         <h2>۱۶ ماژول آماده، متصل به یک هسته مشترک</h2>
         <p class="section-sub">هر ماژول صفحه، کارتابل، فرم ثبت و گزارش خودش را دارد و رویدادهایش به حسابداری متصل می‌شود.</p>
       </div>
-      <div class="module-showcase">
-        ${modules.filter((item) => item.id !== 'overview').map((item) => `<article class="showcase-card">
-          <span class="showcase-icon">${item.icon}</span>
-          <h3>${item.label}</h3>
-          <p>${item.note}</p>
-          <small>${item.features.length} زیرقابلیت</small>
-        </article>`).join('')}
-      </div>
-    </section>
-
-    <section class="landing-section" id="install">
-      <div class="install-strip reveal">
-        <div>
-          <h2>راهکار را روی موبایل و دسکتاپ نصب کنید</h2>
-          <p>یک کلیک نصب، اجرای تمام‌صفحه، دسترسیِ سریع و ادامه‌ی کار حتی بدون اینترنت. نیازی به فروشگاهِ برنامه نیست.</p>
-        </div>
-        <button class="ghost-button" id="landing-install-strip" type="button">⬇ نصبِ رایگان برنامه</button>
+      <div class="module-showcase" role="list">
+        ${modules.filter((item) => item.id !== 'overview').map((item, index) => {
+          const guide = moduleGuides[item.id];
+          return `<button class="showcase-card" data-module-guide="${item.id}" type="button" role="listitem" aria-label="آشنایی با ماژول ${item.label}">
+            <span class="showcase-number">${String(index + 1).padStart(2, '۰')}</span>
+            <span class="showcase-icon">${item.icon}</span>
+            <span class="showcase-content"><strong>${item.label}</strong><small>${guide?.summary ?? item.note}</small></span>
+            <span class="showcase-link">آشنایی با ماژول <b>←</b></span>
+          </button>`;
+        }).join('')}
       </div>
     </section>
 
@@ -1687,12 +1627,21 @@ function renderLanding(): void {
         <span class="section-kicker-landing">پرسش‌های پرتکرار</span>
         <h2>پاسخِ کوتاه به پرسش‌های مهم شما</h2>
       </div>
-      <div class="faq-list reveal">
-        <details class="faq-item" open><summary>آیا داده‌های من روی دستگاه خودم می‌ماند؟</summary><div>بله. نسخه‌ی نصبی روی ویندوز یا داکر کاملاً روی سرورِ خود شما اجرا می‌شود و هیچ داده‌ای به بیرون فرستاده نمی‌شود. نسخه‌ی ابری (سوپابیس) هم در صورتِ تمایلِ شما با کلیدهای خودتان فعال می‌شود.</div></details>
-        <details class="faq-item"><summary>چقدر زمان می‌برد تا راه بیفتیم؟</summary><div>راه‌اندازیِ اولیه کمتر از یک ساعت است: نصب، تعریفِ شرکت، سال مالی و کاربران. ورودِ اسنادِ افتتاحیه و کالاها بسته به حجمِ کار معمولاً یک تا سه روز زمان می‌برد.</div></details>
-        <details class="faq-item"><summary>آیا با سامانه‌ی مودیان و ارزش‌افزوده کار می‌کند؟</summary><div>هر فاکتورِ فروش به‌طور خودکار واردِ «صفِ سامانه‌ی مؤدیان» می‌شود و با یک کلیک ارسال می‌گردد؛ ارسالِ ناموفق دوباره تلاش می‌شود و فایلِ JSON برای بارگذاریِ دستی همیشه در دسترس است. اتصالِ نهایی با کلیدِ اختصاصیِ شرکت شما در فایل تنظیمات انجام می‌شود.</div></details>
-        <details class="faq-item"><summary>تعداد کاربران محدود است؟</summary><div>خیر. در نسخه‌ی نصبی هیچ محدودیتی برای کاربران و شرکت‌ها وجود ندارد و هزینه‌ای بابتِ افزودنِ کاربر پرداخت نمی‌کنید.</div></details>
-        <details class="faq-item"><summary>پشتیبانی چگونه است؟</summary><div>به‌روزرسانی‌ها، پشتیبان‌گیری و امنیت در همه‌ی پلن‌ها فعال است. پشتیبانیِ تلفنی و آنلاین در پلن‌های حرفه‌ای و سازمانی ارائه می‌شود.</div></details>
+      <div class="faq-layout reveal">
+        <aside class="faq-aside">
+          <span class="faq-aside-icon">؟</span>
+          <p class="eyebrow">شروعی روشن</p>
+          <h3>برای شروع لازم نیست متخصص نرم‌افزار باشید.</h3>
+          <p>هر بخش با نام‌های ساده طراحی شده است؛ تیم شما می‌تواند قدم‌به‌قدم کار روزانه‌اش را در یک جریان مشخص انجام دهد.</p>
+          <div class="faq-contact-card"><span>هنوز پرسشی دارید؟</span><button class="text-button" data-scroll="contact" type="button">با ما در تماس باشید ←</button></div>
+        </aside>
+        <div class="faq-list">
+          <details class="faq-item" open><summary>آیا داده‌های من روی دستگاه خودم می‌ماند؟</summary><div>بله. می‌توانید اطلاعات را در محیط اختصاصی سازمان خود نگه دارید؛ دسترسی کاربران هم با نقش و مجوز کنترل می‌شود.</div></details>
+          <details class="faq-item"><summary>چقدر زمان می‌برد تا راه بیفتیم؟</summary><div>شروع کار ساده است: ابتدا شرکت، سال مالی و کاربران را تعریف می‌کنید، سپس اطلاعات اولیه مانند کالاها و مانده‌ها را وارد می‌کنید.</div></details>
+          <details class="faq-item"><summary>آیا با سامانه‌ی مودیان و ارزش‌افزوده کار می‌کند؟</summary><div>فاکتورهای فروش برای پیگیری مالیات آماده می‌شوند و وضعیت ارسال و خطاها در یک صف قابل مشاهده است.</div></details>
+          <details class="faq-item"><summary>تعداد کاربران محدود است؟</summary><div>هر پلن برای اندازه مشخصی از تیم طراحی شده است؛ با رشد سازمان می‌توانید پلن مناسب‌تری انتخاب کنید.</div></details>
+          <details class="faq-item"><summary>پشتیبانی چگونه است؟</summary><div>به‌روزرسانی، پشتیبان‌گیری و امنیت در همه پلن‌ها در نظر گرفته شده و سطح پاسخ‌گویی متناسب با پلن انتخابی شماست.</div></details>
+        </div>
       </div>
     </section>
 
@@ -1707,13 +1656,13 @@ function renderLanding(): void {
         </button>
       </div>
       <div class="pricing-grid">
-        ${plans.map((plan) => `<article class="pricing-card ${plan.highlight ? 'highlight' : ''}">
-          ${plan.highlight ? '<span class="pricing-ribbon">پیشنهاد ویژه</span>' : ''}
+        ${plans.map((plan, index) => `<article class="pricing-card ${plan.highlight ? 'highlight' : ''}">
+          <div class="pricing-card-top"><span class="plan-index">پلن ${String(index + 1).padStart(2, '۰')}</span>${plan.highlight ? '<span class="pricing-ribbon">پیشنهاد ویژه</span>' : ''}</div>
           <h3>${plan.name}</h3>
           <p class="pricing-note">${plan.note}</p>
-          <p class="pricing-price">${priceOf(plan.monthly, plan.yearly)}</p>
+          <div class="pricing-price-wrap"><span>هزینه اشتراک</span><p class="pricing-price">${priceOf(plan.monthly, plan.yearly)}</p></div>
           <ul>${plan.features.map((feature) => `<li><span>✓</span>${feature}</li>`).join('')}</ul>
-          <button class="${plan.highlight ? 'primary-button' : 'secondary-button'}" data-scroll="contact" type="button">${plan.cta}</button>
+          <button class="${plan.highlight ? 'primary-button' : 'secondary-button'} pricing-cta" data-scroll="contact" type="button">${plan.cta}<span>←</span></button>
         </article>`).join('')}
       </div>
     </section>
@@ -1742,30 +1691,6 @@ function renderLanding(): void {
       </div>
     </section>
 
-    <section class="landing-section alt" id="source-download">
-      <div class="section-title">
-        <span class="eyebrow">برای توسعه‌دهنده</span>
-        <h2>سورسِ کاملِ پروژه را یک‌جا بگیرید</h2>
-        <p>کلِ کدِ برنامه، مستندات، تست‌ها و تنظیماتِ انتشار در یک فایلِ زیپِ آماده —
-           بدونِ کلید، بدونِ داده‌ی زنده، بدونِ نیاز به ورود.</p>
-      </div>
-      <div class="cta-row center">
-        <button type="button" class="primary-button source-download" id="one-click-download-source">
-          <span class="source-download-text">⬇ دانلودِ سورسِ کامل (ZIP)</span>
-          <span class="source-download-bar" aria-hidden="true"></span>
-        </button>
-      </div>
-      <p class="source-note center" id="source-download-note">فایلِ زیپ (۹۵ فایل، حدود ۴۵۰ کیلوبایت) با یک کلیک دانلود می‌شود — بدونِ ورود و بدونِ نیاز به چیزی.</p>
-      <div class="direct-link-box">
-        <span class="direct-link-label">اگر برنامه‌ی مدیریتِ دانلود (مثل IDM) لینک را نگرفت، این نشانی را مستقیم به آن بدهید:</span>
-        <div class="direct-link-row">
-          <input type="text" id="direct-source-url" readonly dir="ltr" value="">
-          <button type="button" class="btn-cancel small" id="copy-source-url">کپی نشانی</button>
-        </div>
-        <p class="source-warning" id="source-link-warning" hidden></p>
-      </div>
-    </section>
-
     <footer class="landing-footer">
       <div class="footer-brand">
         <span class="brand-mark">ر</span>
@@ -1783,69 +1708,15 @@ function renderLanding(): void {
 
   const scrollTo = (id: string) => document.querySelector(`#${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.querySelectorAll<HTMLButtonElement>('[data-scroll]').forEach((button) => button.addEventListener('click', () => scrollTo(button.dataset.scroll ?? 'features')));
-  /* نشانیِ مستقیمِ فایلِ زیپ: برای برنامه‌هایی که لینک را خودکار نمی‌گیرند */
-  const directInput = document.querySelector<HTMLInputElement>('#direct-source-url');
-  if (directInput) {
-    // نشانیِ مطلق بر پایه‌ی آدرسِ همین صفحه، تا روی هر میزبانی درست باشد
-    directInput.value = new URL('source.zip', window.location.href).href;
-  }
-  /**
-   * دریافتِ مستقیمِ فایلِ زیپ با یک کلیک.
-   * چرا با جاوااسکریپت (و نه فقط یک لینکِ ساده)؟ چون روی بعضی میزبان‌ها لینک به
-   * جایِ فایل، همان صفحه‌ی HTML را برمی‌گرداند. اینجا نخست بررسی می‌شود که پاسخ
-   * واقعاً یک فایلِ زیپ است؛ اگر نبود، به‌جایِ دادنِ فایلِ اشتباه، پیام داده می‌شود.
-   */
-  const oneClick = document.querySelector<HTMLButtonElement>('#one-click-download-source');
-  const note = document.querySelector<HTMLElement>('#source-download-note');
-  oneClick?.addEventListener('click', () => void downloadSourceDirectly(oneClick, note));
-
-  /**
-   * بررسیِ در دسترس بودنِ فایلِ زیپ روی همین میزبان.
-   * چرا: بعضی میزبان‌ها به‌جای فایل، همان صفحه‌ی HTML را برمی‌گردانند و کاربر
-   * فایلی با نامِ zip اما محتوایِ html می‌گیرد. اینجا پیشاپیش معلوم می‌شود و
-   * به‌جایِ سکوت، راهنما نشان داده می‌شود.
-   */
-  const warnBox = document.querySelector<HTMLElement>('#source-link-warning');
-  // در نسخه‌ی نمایشی هیچ درخواستِ شبکه‌ای فرستاده نمی‌شود (برنامه کاملاً آفلاین است)
-  void (async () => {
-    if (demoMode) return;
-    try {
-      const probe = await fetch(new URL('source.zip', window.location.href).href, { method: 'HEAD', cache: 'no-store' });
-      const type = (probe.headers.get('content-type') ?? '').toLowerCase();
-      const size = Number(probe.headers.get('content-length') ?? 0);
-      const healthy = probe.ok && (type.includes('zip') || type.includes('octet-stream')) && size > 1000;
-      if (!healthy && warnBox) {
-        warnBox.hidden = false;
-        warnBox.textContent = 'در این میزبان فایلِ زیپ در دسترس نیست؛ دانلود ممکن است یک فایلِ نادرست بدهد. نشانیِ زیر را مستقیم در مرورگر یا برنامه‌ی دانلود امتحان کنید.';
-      }
-    } catch {
-      if (warnBox) warnBox.hidden = false;
-    }
-  })();
-  document.querySelector<HTMLButtonElement>('#copy-source-url')?.addEventListener('click', (event) => {
-    const button = event.currentTarget as HTMLButtonElement;
-    const value = document.querySelector<HTMLInputElement>('#direct-source-url')?.value ?? '';
-    const done = () => { button.textContent = 'کپی شد ✓'; window.setTimeout(() => { button.textContent = 'کپی نشانی'; }, 2200); };
-    if (navigator.clipboard?.writeText) {
-      void navigator.clipboard.writeText(value).then(done).catch(() => {
-        document.querySelector<HTMLInputElement>('#direct-source-url')?.select();
-        button.textContent = 'انتخاب شد — Ctrl+C';
-        window.setTimeout(() => { button.textContent = 'کپی نشانی'; }, 2200);
-      });
-    } else {
-      document.querySelector<HTMLInputElement>('#direct-source-url')?.select();
-      button.textContent = 'انتخاب شد — Ctrl+C';
-      window.setTimeout(() => { button.textContent = 'کپی نشانی'; }, 2200);
-    }
-  });
-  document.querySelector<HTMLButtonElement>('#landing-install')?.addEventListener('click', () => void runInstallPrompt());
-  document.querySelector<HTMLButtonElement>('#landing-install-strip')?.addEventListener('click', () => void runInstallPrompt());
   // ظاهر شدنِ تدریجیِ بخش‌ها هنگامِ اسکرول
   setupScrollReveal();
   document.querySelector<HTMLButtonElement>('#landing-login')?.addEventListener('click', renderLogin);
   document.querySelector<HTMLButtonElement>('#footer-login')?.addEventListener('click', renderLogin);
   document.querySelector<HTMLButtonElement>('#landing-start')?.addEventListener('click', renderLogin);
   document.querySelector<HTMLButtonElement>('#hero-start')?.addEventListener('click', renderLogin);
+  document.querySelectorAll<HTMLButtonElement>('[data-module-guide]').forEach((button) =>
+    button.addEventListener('click', () => openModuleGuide(button.dataset.moduleGuide ?? '')),
+  );
   document.querySelector<HTMLButtonElement>('#pricing-toggle')?.addEventListener('click', () => { pricingCycle = pricingCycle === 'monthly' ? 'yearly' : 'monthly'; renderLanding(); scrollTo('pricing'); });
   document.querySelector<HTMLFormElement>('#contact-form')?.addEventListener('submit', saveContact);
 }
@@ -1863,7 +1734,7 @@ function renderLogin(): void {
     <section class="login-left">
       <div class="login-left-content">
         <div class="login-left-header">
-          <span class="brand-mark-large">ر</span>
+          <span class="brand-mark-large" aria-hidden="true"><b>ر</b></span>
           <div><h1>راهکار</h1><small>سیستم یکپارچه عملیات سازمان</small></div>
         </div>
         <p class="login-lead">مالی، فروش، انبار، تولید و منابع انسانی در یک پلتفرم امن و یکپارچه.</p>
@@ -1886,7 +1757,7 @@ function renderLogin(): void {
     <section class="login-right">
       <div class="login-card">
         <div class="login-card-head">
-          <span class="brand-mark">ر</span>
+          <span class="brand-mark login-brand-mark" aria-hidden="true"><b>ر</b></span>
           <h2>ورود به سیستم</h2>
           <p>نام کاربری و رمز عبور خود را وارد کنید</p>
         </div>
@@ -2392,7 +2263,7 @@ function overviewMarkup(): string {
     <article class="metric-card accent">
       <div class="metric-top"><span>مانده نقدینگی</span><span class="trend ${cashBalance >= 0 ? 'up' : 'down'}">${cashBalance >= 0 ? '↑' : '↓'} ${treasuryTransactions.length} تراکنش</span></div>
       <strong>${money(cashBalance)} <small>ریال</small></strong>
-      <div class="sparkline">${'<i></i>'.repeat(9)}</div>
+      ${cashBalanceChartMarkup()}
       <small class="metric-foot">دریافت ${money(receipts)} · پرداخت ${money(payments)} ریال</small>
     </article>
     <article class="metric-card">
@@ -3229,13 +3100,13 @@ async function togglePeriod(id: string, status: string): Promise<void> {
 function fiscalSettingsMarkup(): string {
   // بخش‌هایی که کاربر مجوز آن‌ها را ندارد کلاً نمایش داده نمی‌شوند
   if (session?.permissions?.length && !session.permissions.includes('accounting.read')) return '';
-  const periods = fiscalPeriods.length ? `<div class="period-list">${fiscalPeriods.map((period) => `<div class="period-row"><div><strong>${escapeHtml(period.title)}</strong><small>${period.startsOn} تا ${period.endsOn}</small></div><button class="workflow-action" data-toggle-period="${period.id}" data-status="${period.status}">${period.status === 'باز' ? 'بستن دوره' : 'بازگشایی'}</button></div>`).join('')}</div>` : '<p class="empty-hint">دوره‌ای تعریف نشده است.</p>';
+  const periods = fiscalPeriods.length ? `<div class="period-list">${fiscalPeriods.map((period) => `<div class="period-row"><div><strong>${escapeHtml(period.title)}</strong><small>${period.startsOn} تا ${period.endsOn}</small></div><button class="workflow-action period-action" data-toggle-period="${period.id}" data-status="${period.status}">${period.status === 'باز' ? 'بستن دوره' : 'بازگشایی'}</button></div>`).join('')}</div>` : '<p class="empty-hint">دوره‌ای تعریف نشده است.</p>';
   const centers = costCenters.length ? `<div class="cost-center-list">${costCenters.map((center) => `<div class="cost-center-row"><span class="account-code">${escapeHtml(center.code)}</span><strong>${escapeHtml(center.title)}</strong></div>`).join('')}</div>` : '<p class="empty-hint">مرکز هزینه‌ای تعریف نشده است.</p>';
   const years = [...new Set(fiscalPeriods.map((period) => Number(period.year)).filter((year) => Number.isFinite(year)))].sort((a, b) => b - a);
   const openYears = years.filter((year) => fiscalPeriods.some((period) => Number(period.year) === year && period.status === 'باز'));
   return `<div class="panel-heading"><div><h2>سال مالی و مراکز هزینه</h2><p>دوره‌ها و مراکز هزینه از سرور خوانده می‌شوند و به اسناد متصل می‌شوند</p></div>
     <div class="panel-tools">
-      ${openYears.length ? `<select id="close-year" class="year-select">${openYears.map((year) => `<option value="${year}">بستن سال ${year}</option>`).join('')}</select><button type="button" class="btn-secondary small" id="close-fiscal-year">🔒 بستن سال مالی</button>` : '<span class="count">همه‌ی دوره‌ها بسته‌اند</span>'}
+      ${openYears.length ? `<select id="close-year" class="year-select">${openYears.map((year) => `<option value="${year}">بستن سال ${year}</option>`).join('')}</select><button type="button" class="btn-secondary small fiscal-close-button" id="close-fiscal-year">🔒 بستن سال مالی</button>` : '<span class="count">همه‌ی دوره‌ها بسته‌اند</span>'}
     </div>
     <span class="count">${fiscalPeriods.length} دوره · ${costCenters.length} مرکز</span></div><div class="fiscal-grid"><div><h4>دوره‌های مالی</h4>${periods}</div><div><h4>مراکز هزینه</h4>${centers}<form class="cost-center-form" data-cost-center-form><input name="code" placeholder="کد (مثل CC-1007)" required><input name="title" placeholder="عنوان مرکز هزینه" required><button class="primary-button" type="submit">＋ افزودن مرکز</button></form></div></div>`;
 }
@@ -4335,17 +4206,17 @@ function backupPanelMarkup(): string {
   return `<section class="panel backup-panel">
       <div class="panel-heading"><div><h2>پشتیبان‌گیری و بازگردانی</h2><p>یک فایل از همه‌ی شرکت‌ها و داده‌ها بگیرید و هر زمان لازم بود برگردانید</p></div><span class="count">ایمن</span></div>
       <div class="backup-actions">
-        <button type="button" class="primary-button" id="backup-download">⬇ دریافت نسخه‌ی پشتیبان</button>
-        <button type="button" class="btn-secondary" id="backup-restore">⬆ بازگردانی از فایل</button>
+        <button type="button" class="primary-button backup-download-button" id="backup-download">⬇ دریافت نسخه‌ی پشتیبان</button>
+        <button type="button" class="btn-secondary backup-restore-button" id="backup-restore">⬆ بازگردانی از فایل</button>
         <input type="file" id="backup-file" accept="application/json,.json" hidden />
       </div>
       <p class="muted small">فایل پشتیبان شامل همه‌ی شرکت‌ها، اسناد حسابداری، چک‌ها، حقوق و کاربران است. پیش از بازگردانی، از وضعیت فعلی یک نسخه‌ی امن در سرور نگه داشته می‌شود.</p>
       <div class="backup-auto">
         <div class="backup-auto-head">
           <div><strong>پشتیبان‌گیریِ خودکار</strong><small>با تنظیمِ BACKUP_INTERVAL_HOURS در فایل .env، سرور به‌طور دوره‌ای نسخه می‌گیرد</small></div>
-          <button type="button" class="btn-secondary" id="backup-now">⟳ همین حالا نسخه بگیر</button>
+          <button type="button" class="btn-secondary backup-now-button" id="backup-now">⟳ همین حالا نسخه بگیر</button>
         </div>
-        <div id="backup-list" class="backup-list">${backupFiles.length ? backupFiles.map((file) => `<div class="backup-row"><span>${escapeHtml(file.name)}</span><small>${new Date(file.at).toLocaleString('fa-IR')}</small><button type="button" class="btn-secondary small" data-backup-file="${escapeHtml(file.name)}">⬇ دریافت</button></div>`).join('') : '<p class="muted small">نسخه‌ی خودکاری روی سرور ثبت نشده است. با دکمه‌ی بالا یک نسخه بسازید (در صورت اتصال به سرور).</p>'}</div>
+        <div id="backup-list" class="backup-list">${backupFiles.length ? backupFiles.map((file) => `<div class="backup-row"><span>${escapeHtml(file.name)}</span><small>${new Date(file.at).toLocaleString('fa-IR')}</small><button type="button" class="btn-secondary small backup-file-button" data-backup-file="${escapeHtml(file.name)}">⬇ دریافت</button></div>`).join('') : '<p class="muted small">نسخه‌ی خودکاری روی سرور ثبت نشده است. با دکمه‌ی بالا یک نسخه بسازید (در صورت اتصال به سرور).</p>'}</div>
       </div>
     </section>`;
 }
@@ -4381,7 +4252,7 @@ async function loadBackupList(): Promise<void> {
   const holder = document.querySelector<HTMLElement>('#backup-list');
   if (!holder) { if (activeModule === 'organization') render(); return; }
   holder.innerHTML = backupFiles.length
-    ? backupFiles.map((file) => `<div class="backup-row"><span>${escapeHtml(file.name)}</span><small>${new Date(file.at).toLocaleString('fa-IR')}</small><button type="button" class="btn-secondary small" data-backup-file="${escapeHtml(file.name)}">⬇ دریافت</button></div>`).join('')
+    ? backupFiles.map((file) => `<div class="backup-row"><span>${escapeHtml(file.name)}</span><small>${new Date(file.at).toLocaleString('fa-IR')}</small><button type="button" class="btn-secondary small backup-file-button" data-backup-file="${escapeHtml(file.name)}">⬇ دریافت</button></div>`).join('')
     : '<p class="muted small">نسخه‌ی خودکاری روی سرور ثبت نشده است. با دکمه‌ی بالا یک نسخه بسازید.</p>';
   document.querySelectorAll<HTMLButtonElement>('[data-backup-file]').forEach((button) =>
     button.addEventListener('click', () => void downloadServerBackup(button.dataset.backupFile ?? '')),
@@ -5610,9 +5481,6 @@ dropLegacyTokens();
 render();
 // پایشِ ملایمِ وضعیت اتصال (دیگر در هر بازسازی درخواست ارسال نمی‌شود)
 startStatusMonitor();
-// نصب روی دستگاه و کار بدون اینترنت (PWA)
-registerServiceWorker();
-setupInstallPrompt();
 
 function closeAnyModal(id: string): void { document.querySelector(`#${id}`)?.remove(); }
 

@@ -4,9 +4,8 @@
  * استفاده:  node scripts/serve-static.mjs <پوشه> <پورت>
  * مثال:     node scripts/serve-static.mjs dist-demo 8082
  *
- * نکته: دانلودِ فایل‌ها (به‌ویژه source.zip) باید برای برنامه‌های مدیریتِ
- * دانلود (مانند IDM) هم درست کار کند؛ از این‌رو اندازه‌ی فایل، پشتیبانی از
- * دریافتِ بخشی و پاسخ به درخواستِ HEAD فرستاده می‌شود.
+ * این سرویس اندازه‌ی فایل، پشتیبانی از دریافتِ بخشی و پاسخ به درخواستِ HEAD
+ * را می‌فرستد تا دریافت فایل‌ها در مرورگرهای مختلف پایدار باشد.
  */
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -47,8 +46,6 @@ createServer((request, response) => {
     'Last-Modified': stats.mtime.toUTCString(),
     'Cache-Control': 'no-cache',
   };
-  if (extension === '.zip') headers['Content-Disposition'] = `attachment; filename="rakahar-source.zip"`;
-
   // درخواستِ HEAD: برنامه‌های دانلود نخست آن را می‌فرستند تا اندازه را بفهمند
   if (request.method === 'HEAD') { response.writeHead(200, headers).end(); return; }
 

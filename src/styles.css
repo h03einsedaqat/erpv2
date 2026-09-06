@@ -1421,34 +1421,6 @@ button:active { transform: translateY(1px); }
 @media print { .report-tabs { display: none !important; } }
 
 /* =====================================================================
-   نصبِ برنامه (PWA)
-   ===================================================================== */
-.install-banner {
-  position: fixed; inset-inline: 0; bottom: 0; z-index: 60;
-  transform: translateY(120%); transition: transform .38s cubic-bezier(.2, .8, .25, 1);
-  padding: 0 16px 18px; display: flex; justify-content: center; pointer-events: none;
-}
-.install-banner.visible { transform: translateY(0); }
-.install-banner-inner {
-  pointer-events: auto; width: min(760px, 100%);
-  display: flex; align-items: center; gap: 14px; padding: 14px 18px;
-  background: rgba(255, 255, 255, .96); backdrop-filter: blur(14px);
-  border: 1px solid rgba(28, 122, 109, .22); border-radius: 18px;
-  box-shadow: 0 22px 48px rgba(13, 40, 38, .22);
-}
-.install-banner-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 13px; background: linear-gradient(135deg, #1c7a6d, #2f9e8f); color: #fff; font-size: 18px; }
-.install-banner-text { flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px; }
-.install-banner-text strong { font-size: 13.5px; color: #173b3a; }
-.install-banner-text small { font-size: 11px; color: var(--muted); line-height: 1.7; }
-.install-banner-actions { display: flex; gap: 8px; flex: 0 0 auto; }
-.install-banner .btn-cancel { min-height: 40px; padding: 0 16px; border-radius: 11px; border: 1px solid rgba(206, 63, 63, .3); background: rgba(206, 63, 63, .07); color: #c0392b; font-family: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
-@media (max-width: 640px) {
-  .install-banner-inner { flex-wrap: wrap; }
-  .install-banner-actions { width: 100%; }
-  .install-banner-actions > button { flex: 1 1 auto; }
-}
-
-/* =====================================================================
    صفحه‌ی اصلی — طراحیِ مدرن ۲۰۲۶
    ===================================================================== */
 .landing-page { --landing-ink: #0f2b2b; }
@@ -1518,12 +1490,6 @@ button:active { transform: translateY(1px); }
 .module-chip:hover { border-color: rgba(28, 122, 109, .4); transform: translateY(-3px); box-shadow: 0 16px 30px rgba(13, 40, 38, .08); }
 .module-chip span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: rgba(28, 122, 109, .1); color: #1c7a6d; font-size: 15px; }
 .module-chip strong { font-size: 12.5px; color: #173b3a; }
-
-/* بخشِ نصب */
-.install-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; padding: clamp(24px, 4vw, 40px); border-radius: 24px; background: linear-gradient(120deg, #0f5f6c, #1c7a6d 55%, #2f9e8f); color: #fff; box-shadow: 0 26px 54px rgba(15, 95, 108, .28); }
-.install-strip h2 { margin: 0 0 8px; font-size: clamp(19px, 2.6vw, 27px); }
-.install-strip p { margin: 0; font-size: 13px; line-height: 2; opacity: .92; }
-.install-strip .ghost-button { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .4); color: #fff; min-height: 50px; padding: 0 24px; }
 
 /* پرسش‌های پرتکرار */
 .faq-list { display: flex; flex-direction: column; gap: 10px; max-width: 860px; }
@@ -1640,60 +1606,321 @@ button:active { transform: translateY(1px); }
   .tax-row { background: rgba(30, 41, 59, 0.55); }
 }
 
+
 /* =====================================================================
-   دکمه‌ی «دانلودِ سورسِ کامل» در صفحه‌ی ورود
+   پرداخت نهایی صفحه‌ی معرفی، راهنماهای ماژول و ناوبری
    ===================================================================== */
-a.source-download {
-  display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-  cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
-}
-a.source-download:hover { transform: translateY(-2px); }
-a.source-download:active { transform: translateY(0) scale(.98); }
-a.source-download:focus-visible { outline: 3px solid rgba(47, 158, 143, .45); outline-offset: 3px; }
-.source-note { margin: 10px 0 0; font-size: 12.5px; color: var(--muted, #64748b); line-height: 1.8; }
-.cta-row.center { justify-content: center; }
-#source-download .section-title { text-align: center; margin-inline: auto; }
-@media print { a.source-download { display: none !important; } }
+/* نام راهکار روی سربرگ روشن است؛ دیگر با پس‌زمینه‌ی سفید یکی نمی‌شود. */
+.landing-page .landing-nav .brand { color: #153c38; padding-bottom: 0; }
+.landing-page .landing-nav .brand strong { color: #153c38; font-weight: 800; letter-spacing: -.035em; }
+.landing-page .landing-nav .brand small { color: #5d7771; font-weight: 500; }
+.landing-page .landing-nav .brand-mark { color: #fff; }
 
-/* کادرِ نشانیِ مستقیمِ دانلود (برای برنامه‌های مدیریتِ دانلود) */
-.direct-link-box {
-  margin: 18px auto 0; max-width: 720px; padding: 14px 16px;
-  border: 1px solid rgba(28, 122, 109, .22); border-radius: 14px;
-  background: rgba(255, 255, 255, .7); backdrop-filter: blur(8px);
+/* شبکه‌ی ماژول‌ها: هر کارت یک نقطه‌ی ورود واضح به صفحه‌ی توضیحات است. */
+.module-showcase {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 1320px;
+  margin-inline: auto;
 }
-.direct-link-label { display: block; font-size: 12.5px; color: var(--muted, #64748b); line-height: 1.9; margin-bottom: 10px; }
-.direct-link-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.direct-link-row input {
-  flex: 1 1 260px; min-width: 0; direction: ltr; text-align: left;
-  padding: 10px 12px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  border: 1px solid rgba(148, 163, 184, .35); border-radius: 10px; background: #fff; color: inherit;
+.showcase-card {
+  position: relative;
+  isolation: isolate;
+  min-height: 222px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 20px;
+  border: 1px solid rgba(21, 86, 77, .12);
+  border-radius: 22px;
+  background: linear-gradient(145deg, #fff 0%, #f2faf7 100%);
+  box-shadow: 0 12px 30px rgba(15, 65, 58, .06);
+  color: #183c38;
+  text-align: right;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease;
 }
-.direct-link-row input:focus-visible { outline: 2px solid rgba(47, 158, 143, .5); outline-offset: 1px; }
-@media (prefers-color-scheme: dark) {
-  .direct-link-box { background: rgba(30, 41, 59, .6); border-color: rgba(148, 163, 184, .25); }
-  .direct-link-row input { background: rgba(15, 23, 42, .8); }
+.showcase-card::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 128px;
+  height: 128px;
+  left: -50px;
+  bottom: -58px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(83, 190, 157, .2), rgba(83, 190, 157, 0) 70%);
+  transition: transform .28s ease;
+}
+.showcase-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(26, 130, 109, .36);
+  background: linear-gradient(145deg, #fff 0%, #e8f7f1 100%);
+  box-shadow: 0 22px 44px rgba(15, 82, 71, .13);
+}
+.showcase-card:hover::after { transform: scale(1.45); }
+.showcase-number {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  color: #9aafa9;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .09em;
+}
+.showcase-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #176e61, #2d9b83);
+  box-shadow: 0 9px 18px rgba(22, 117, 99, .2);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+}
+.showcase-content { display: grid; gap: 7px; }
+.showcase-content strong { color: #173e39; font-size: 15px; font-weight: 800; }
+.showcase-content small { color: #607a73; font-size: 11px; line-height: 1.9; }
+.showcase-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 16px;
+  color: #177965;
+  font-size: 11px;
+  font-weight: 800;
+}
+.showcase-link b { font-size: 16px; line-height: .7; transition: transform .2s ease; }
+.showcase-card:hover .showcase-link b { transform: translateX(-4px); }
+
+/* پرسش‌های پرتکرار در دو ستون متعادل قرار می‌گیرند و فضای خالی مفید شده است. */
+.faq-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, .76fr) minmax(0, 1.24fr);
+  gap: 22px;
+  max-width: 1160px;
+  margin-inline: auto;
+  align-items: stretch;
+}
+.faq-aside {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 30px;
+  border: 1px solid rgba(17, 96, 82, .15);
+  border-radius: 24px;
+  background: linear-gradient(145deg, #104d49, #167564 62%, #229278);
+  color: #fff;
+  box-shadow: 0 20px 44px rgba(14, 73, 65, .2);
+}
+.faq-aside::after { content: ''; position: absolute; width: 190px; height: 190px; left: -76px; bottom: -92px; border-radius: 50%; background: rgba(255,255,255,.09); }
+.faq-aside-icon { display: grid; place-items: center; width: 50px; height: 50px; margin-bottom: 22px; border: 1px solid rgba(255,255,255,.25); border-radius: 16px; background: rgba(255,255,255,.13); font-size: 27px; font-weight: 800; }
+.faq-aside .eyebrow { color: #b9f0de; margin-bottom: 10px; }
+.faq-aside h3 { max-width: 260px; margin: 0 0 13px; font-size: 22px; line-height: 1.55; }
+.faq-aside > p:not(.eyebrow) { max-width: 300px; margin: 0; color: rgba(255,255,255,.83); font-size: 12px; line-height: 2; }
+.faq-contact-card { position: relative; z-index: 1; display: grid; gap: 7px; width: 100%; margin-top: auto; padding: 16px; border: 1px solid rgba(255,255,255,.18); border-radius: 16px; background: rgba(6, 55, 49, .22); }
+.faq-contact-card > span { font-size: 11px; color: rgba(255,255,255,.76); }
+.faq-contact-card .text-button { padding: 0; color: #fff; font-size: 12px; font-weight: 800; }
+.faq-layout .faq-list { display: grid; gap: 10px; margin: 0; }
+.faq-layout .faq-item { border: 1px solid #dfebe6; border-radius: 16px; background: rgba(255,255,255,.84); box-shadow: 0 8px 22px rgba(20,66,58,.04); }
+.faq-layout .faq-item[open] { border-color: rgba(26, 134, 111, .32); background: #fff; box-shadow: 0 12px 28px rgba(20,99,85,.09); }
+.faq-layout .faq-item summary { padding: 17px 20px; color: #204742; font-size: 13px; font-weight: 750; }
+.faq-layout .faq-item summary::after { color: #14816c; }
+.faq-layout .faq-item > div { padding: 0 20px 17px; color: #657d76; font-size: 12px; line-height: 2; }
+
+/* کارت‌های پلن، خواناتر و هم‌قد هستند. */
+.pricing-grid { max-width: 1120px; margin-inline: auto; align-items: stretch; }
+.pricing-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 450px;
+  padding: 24px;
+  overflow: hidden;
+  border: 1px solid #dfece6;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #fff, #f6fbf9);
+  box-shadow: 0 14px 32px rgba(17, 74, 65, .06);
+}
+.pricing-card:hover { transform: translateY(-6px); border-color: rgba(22, 132, 109, .3); box-shadow: 0 23px 46px rgba(17, 74, 65, .13); }
+.pricing-card.highlight { transform: translateY(-10px); border: 1px solid rgba(234, 197, 125, .42); background: linear-gradient(155deg, #103f3d, #12695d 64%, #187c6b); box-shadow: 0 28px 58px rgba(11, 67, 59, .26); }
+.pricing-card.highlight:hover { transform: translateY(-15px); }
+.pricing-card-top { display: flex; align-items: center; justify-content: space-between; min-height: 28px; margin-bottom: 13px; }
+.plan-index { color: #8aa39b; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+.pricing-card.highlight .plan-index { color: #bde4d7; }
+.pricing-card .pricing-ribbon { position: static; box-shadow: none; font-size: 10px; }
+.pricing-card h3 { margin: 0 0 7px; color: #173e39; font-size: 23px; font-weight: 800; }
+.pricing-card.highlight h3 { color: #fff; }
+.pricing-note { min-height: 43px; margin-bottom: 18px; color: #637b74; font-size: 11px; line-height: 1.9; }
+.pricing-price-wrap { margin-bottom: 20px; padding: 13px 14px; border: 1px solid rgba(22, 124, 104, .11); border-radius: 14px; background: rgba(226, 245, 237, .68); }
+.pricing-price-wrap > span { color: #6e877f; font-size: 10px; font-weight: 700; }
+.pricing-price { margin: 5px 0 0; color: #126b5c; font-size: 17px; line-height: 1.6; }
+.pricing-card.highlight .pricing-price-wrap { border-color: rgba(255,255,255,.13); background: rgba(255,255,255,.09); }
+.pricing-card.highlight .pricing-price-wrap > span { color: #bfe3d7; }
+.pricing-card.highlight .pricing-price { color: #f2c77d; }
+.pricing-card ul { flex: 1; margin-bottom: 22px; }
+.pricing-card li { color: #49665e; font-size: 11.5px; }
+.pricing-card.highlight li { color: #e2f2ed; }
+.pricing-cta { width: 100%; justify-content: space-between; }
+.pricing-cta > span { font-size: 18px; line-height: 1; }
+.pricing-card.highlight .pricing-cta { background: #fff; color: #126252; box-shadow: none; }
+
+/* صفحه‌ی مستقلِ هر ماژول */
+.module-guide-page { min-height: 100vh; overflow: hidden; background: linear-gradient(180deg, #f5faf8 0%, #fff 58%, #eef8f4 100%); color: #173b38; }
+.guide-nav { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 1360px; margin: 0 auto; padding: 16px clamp(18px, 5vw, 64px); }
+.guide-brand { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: #173e39; font-size: 18px; font-weight: 850; }
+.guide-brand .brand-mark { width: 40px; height: 40px; border-radius: 13px; color: #fff; font-size: 23px; }
+.guide-nav-actions { display: flex; align-items: center; gap: 9px; }
+.guide-back { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 11px; background: transparent; color: #52716a; font-size: 12px; font-weight: 700; }
+.guide-back:hover { background: #e7f2ed; color: #177461; }
+.guide-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 40px; align-items: center; max-width: 1220px; margin: 0 auto; padding: clamp(45px, 7vw, 90px) clamp(18px, 5vw, 45px) clamp(54px, 8vw, 92px); }
+.guide-hero::before { content: ''; position: absolute; z-index: 0; width: 560px; height: 560px; left: -290px; top: -300px; border-radius: 50%; background: radial-gradient(circle, rgba(90, 204, 169, .22), rgba(90,204,169,0) 68%); }
+.guide-hero-copy, .guide-symbol { position: relative; z-index: 1; }
+.guide-kicker { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 15px; color: #167963; font-size: 11px; font-weight: 800; }
+.guide-kicker i { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: #dff2e9; font-style: normal; font-size: 15px; }
+.guide-hero h1 { margin: 0 0 14px; color: #143e39; font-size: clamp(38px, 5.2vw, 65px); line-height: 1.15; letter-spacing: -.06em; }
+.guide-hero-copy > p { max-width: 680px; margin: 0; color: #54716a; font-size: clamp(16px, 1.8vw, 19px); line-height: 2; }
+.guide-hero-note { display: grid; gap: 6px; max-width: 680px; margin-top: 28px; padding: 15px 17px; border-right: 3px solid #32a588; border-radius: 0 14px 14px 0; background: rgba(222, 246, 236, .7); }
+.guide-hero-note span { color: #69837b; font-size: 10px; font-weight: 700; }
+.guide-hero-note strong { color: #24554d; font-size: 12px; line-height: 1.85; }
+.guide-symbol { display: grid; place-items: center; width: min(100%, 330px); aspect-ratio: 1; justify-self: center; border: 1px solid rgba(29, 135, 112, .2); border-radius: 42% 58% 51% 49% / 42% 44% 56% 58%; background: linear-gradient(145deg, #def5ec, #bde9d9); box-shadow: inset 0 0 0 15px rgba(255,255,255,.32), 0 30px 55px rgba(17, 112, 90, .16); }
+.guide-symbol > span { display: grid; place-items: center; width: 126px; height: 126px; border-radius: 38px; background: linear-gradient(145deg, #126154, #259a7d); box-shadow: 0 20px 32px rgba(15, 107, 87, .27); color: #fff; font-size: 61px; }
+.guide-symbol i { position: absolute; display: block; width: 11px; height: 11px; border-radius: 50%; background: #e5ab62; box-shadow: 0 0 0 8px rgba(229,171,98,.14); }
+.guide-symbol i:nth-of-type(1) { top: 23%; right: 15%; }
+.guide-symbol i:nth-of-type(2) { bottom: 19%; left: 14%; width: 8px; height: 8px; background: #22957b; box-shadow: 0 0 0 7px rgba(34,149,123,.13); }
+.guide-symbol i:nth-of-type(3) { top: 13%; left: 29%; width: 6px; height: 6px; background: #6cae9c; box-shadow: none; }
+.guide-content { display: grid; grid-template-columns: minmax(250px, .82fr) minmax(420px, 1.38fr); gap: 18px; max-width: 1220px; margin: 0 auto; padding: 0 clamp(18px, 5vw, 45px) 72px; }
+.guide-card { padding: 26px; border: 1px solid rgba(23, 92, 78, .1); border-radius: 22px; background: rgba(255,255,255,.9); box-shadow: 0 16px 34px rgba(15, 74, 63, .06); }
+.guide-card-number { display: inline-flex; margin-bottom: 16px; color: #21846f; font-size: 11px; font-weight: 900; letter-spacing: .1em; }
+.guide-card h2 { margin: 0 0 10px; color: #183f3a; font-size: 20px; }
+.guide-card > p { margin: 0; color: #5d766f; font-size: 12px; line-height: 2.05; }
+.guide-intro { display: flex; flex-direction: column; }
+.guide-example { margin-top: auto; padding: 15px; border: 1px solid rgba(27, 123, 102, .13); border-radius: 14px; background: #eff9f5; }
+.guide-example span { color: #21816e; font-size: 10px; font-weight: 800; }
+.guide-example p { margin: 6px 0 0; color: #526e67; font-size: 11px; line-height: 1.95; }
+.guide-flow-card { grid-row: span 2; }
+.guide-card-heading { display: flex; align-items: flex-start; gap: 14px; }
+.guide-card-heading .guide-card-number { min-width: 22px; }
+.guide-card-heading h2 { margin-bottom: 5px; }
+.guide-card-heading p { margin: 0; color: #789088; font-size: 11px; line-height: 1.8; }
+.guide-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 34px 0 0; list-style: none; }
+.guide-flow li { position: relative; min-height: 144px; padding: 18px 14px; border: 1px solid #dbece5; border-radius: 16px; background: linear-gradient(160deg, #fbfefd, #edf8f4); }
+.guide-flow li > span { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 18px; border-radius: 9px; background: #177864; color: #fff; font-size: 10px; font-weight: 800; }
+.guide-flow li strong { display: block; color: #244c45; font-size: 11.5px; line-height: 1.8; }
+.guide-flow li i { position: absolute; top: 51px; left: -14px; z-index: 2; display: grid; place-items: center; width: 23px; height: 23px; border: 1px solid #dcebe5; border-radius: 50%; background: #fff; color: #229078; font-style: normal; font-size: 14px; }
+.guide-outcome { display: flex; flex-direction: column; }
+.guide-outcome ul { display: grid; gap: 8px; padding: 0; margin: 17px 0 0; list-style: none; }
+.guide-outcome li { display: flex; align-items: center; gap: 8px; color: #4c6860; font-size: 11px; }
+.guide-outcome li span { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: #dff3ea; color: #17836d; font-size: 10px; font-weight: 900; }
+.guide-more-section { max-width: 1220px; margin: 0 auto; padding: 0 clamp(18px, 5vw, 45px) 74px; }
+.guide-more-section .eyebrow { margin-bottom: 7px; }
+.guide-more-section h2 { margin: 0 0 20px; color: #173f39; font-size: 23px; }
+.guide-more-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.guide-more-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px; border: 1px solid #dce9e4; border-radius: 14px; background: #fff; color: #244941; text-align: right; }
+.guide-more-card:hover { border-color: #69bba5; background: #f0faf6; transform: translateY(-2px); }
+.guide-more-card > span { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 auto; border-radius: 10px; background: #e6f5ee; color: #167a66; }
+.guide-more-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.guide-more-card b { margin-right: auto; color: #258b75; }
+.guide-cta { display: flex; align-items: center; justify-content: space-between; gap: 25px; max-width: 1130px; margin: 0 auto 40px; padding: 31px 34px; border-radius: 24px; background: linear-gradient(130deg, #123f3c, #176b5d); box-shadow: 0 25px 52px rgba(8, 67, 57, .22); color: #fff; }
+.guide-cta span { color: #aee2d1; font-size: 11px; font-weight: 700; }
+.guide-cta h2 { max-width: 620px; margin: 7px 0 0; font-size: 21px; line-height: 1.65; }
+.guide-cta .secondary-button { border-color: rgba(255,255,255,.2); background: #fff; color: #135c50; white-space: nowrap; }
+.guide-footer { display: flex; justify-content: space-between; gap: 15px; max-width: 1220px; margin: 0 auto; padding: 16px clamp(18px, 5vw, 45px) 30px; border-top: 1px solid rgba(30,99,85,.12); color: #748c85; font-size: 10px; }
+.guide-footer button { border: 0; background: transparent; color: #267b68; font-family: inherit; font-size: 10px; font-weight: 800; }
+
+/* نمودار مانده نقدینگی از تراکنش‌های واقعی ساخته می‌شود، نه میله‌های ثابت. */
+.cash-chart { margin-top: 13px; padding: 8px 9px 5px; border: 1px solid rgba(25, 125, 104, .13); border-radius: 10px; background: rgba(255,255,255,.58); }
+.cash-chart-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px 4px; color: #69837b; font-size: 8.5px; }
+.cash-chart-label b { color: #237d6a; font-size: 8.5px; font-weight: 800; }
+.cash-chart svg { display: block; width: 100%; height: 47px; overflow: visible; }
+.cash-chart-area { fill: url(#cash-chart-fill); }
+.cash-chart-line { fill: none; stroke: #1b8c73; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.cash-chart-dot { fill: #fff; stroke: #16846d; stroke-width: 2; vector-effect: non-scaling-stroke; }
+
+/* دکمه‌های عملیاتی که فقط کلاس btn-* دارند نیز اندازه و مرز استاندارد می‌گیرند. */
+.btn-primary, .btn-secondary, .btn-ghost, .btn-danger { min-height: 40px; padding: 0 14px; border: 1px solid transparent; border-radius: 11px; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease; }
+.btn-secondary { border-color: #d8e5df; box-shadow: 0 5px 14px rgba(20,72,63,.05); }
+.btn-secondary.small { min-height: 33px; padding-inline: 10px; border-radius: 9px; font-size: 10.5px; }
+.fiscal-close-button { border-color: rgba(197, 115, 39, .28); background: #fff7ea; color: #a4611d; box-shadow: none; }
+.fiscal-close-button:hover { border-color: rgba(178, 91, 23, .48); background: #ffefd3; color: #8e4d10; }
+.period-action { min-height: 33px; border-color: rgba(23, 125, 103, .22); background: #eff9f5; color: #177660; font-size: 10.5px; font-weight: 750; }
+.period-action:hover { border-color: #19836d; background: #19836d; color: #fff; }
+.backup-panel { overflow: visible; }
+.backup-actions { align-items: center; }
+.backup-actions .primary-button, .backup-actions .btn-secondary { min-width: 205px; }
+.backup-restore-button { border-color: rgba(19, 108, 92, .26); background: #eff9f5; color: #156b5a; }
+.backup-restore-button:hover { border-color: #218a73; background: #ddf2e9; }
+.backup-now-button, .backup-file-button { border-color: #d8e5df; background: #fff; color: #315d55; }
+.backup-now-button:hover, .backup-file-button:hover { border-color: #64b39e; background: #eff9f5; color: #126d5b; }
+
+/* منوی دسکتاپ هنگام اسکرول کنار محتوا می‌ماند؛ در موبایل خودِ کشو کامل اسکرول می‌شود. */
+@media (min-width: 901px) {
+  .app-shell { align-items: flex-start; }
+  .sidebar { position: sticky; top: 0; height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+  .sidebar-bottom { flex-shrink: 0; }
+}
+@media (max-width: 900px) {
+  .sidebar { height: 100dvh; max-height: 100dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .sidebar .module-nav { flex: 0 0 auto; }
+  .sidebar-bottom { flex-shrink: 0; margin-top: 20px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
 
-.source-warning {
-  margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.9;
-  color: #92400e; background: rgba(245, 158, 11, .12); border: 1px solid rgba(245, 158, 11, .35);
-}
-@media (prefers-color-scheme: dark) { .source-warning { color: #fcd34d; } }
+/* حرف «ر» در لوگوی ورود و نام کامل برند با کنتراست قطعی نمایش داده می‌شوند. */
+.login-left-header h1 { color: #fff; font-weight: 850; text-shadow: 0 2px 12px rgba(0,0,0,.13); }
+.brand-mark-large b, .login-brand-mark b { display: block; color: #fff; font-family: 'Vazirmatn', Tahoma, sans-serif; font-weight: 900; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,.2); transform: translateY(-1px); }
+.login-left .brand-mark-large { color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.09), 0 10px 25px rgba(0,0,0,.12); }
 
-/* دکمه‌ی تک‌مرحله‌ایِ دریافتِ سورس */
-button.source-download {
-  position: relative; overflow: hidden;
-  display: inline-flex; align-items: center; gap: 8px;
-  transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+@media (max-width: 1120px) {
+  .module-showcase { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .guide-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guide-flow li i { top: auto; bottom: -13px; left: 50%; transform: translateX(-50%) rotate(-90deg); }
+  .guide-flow li:nth-child(2) i { top: 51px; bottom: auto; left: -13px; transform: none; }
 }
-button.source-download:hover:not(:disabled) { transform: translateY(-2px); }
-button.source-download:active:not(:disabled) { transform: translateY(0) scale(.98); }
-button.source-download:disabled { cursor: progress; opacity: .9; }
-.source-download-bar {
-  position: absolute; inset-inline: 0; bottom: 0; height: 3px; border-radius: 0 0 999px 999px;
-  background: rgba(255, 255, 255, .95); transform: scaleX(0); transform-origin: right center;
-  transition: transform .3s ease;
+@media (max-width: 820px) {
+  .faq-layout, .guide-content { grid-template-columns: 1fr; }
+  .faq-aside { min-height: 300px; }
+  .pricing-card.highlight { transform: none; }
+  .pricing-card.highlight:hover { transform: translateY(-6px); }
+  .guide-flow-card { grid-row: auto; }
+  .guide-more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guide-hero { grid-template-columns: 1fr; padding-top: 42px; }
+  .guide-symbol { width: min(280px, 80vw); order: -1; }
 }
-.source-note.center { text-align: center; }
-.source-note.warn { color: #92400e; font-weight: 600; }
-@media (prefers-color-scheme: dark) { .source-note.warn { color: #fcd34d; } }
+@media (max-width: 650px) {
+  .landing-page .landing-nav { align-items: center; }
+  .landing-page .landing-nav .brand small { display: none; }
+  .landing-page .landing-actions { width: auto; }
+  .module-showcase { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+  .showcase-card { min-height: 212px; padding: 16px; border-radius: 18px; }
+  .showcase-icon { width: 42px; height: 42px; margin-bottom: 13px; border-radius: 13px; font-size: 19px; }
+  .showcase-content strong { font-size: 13px; }
+  .showcase-content small { font-size: 10px; line-height: 1.75; }
+  .showcase-link { padding-top: 10px; font-size: 9.5px; }
+  .faq-aside { padding: 24px; }
+  .faq-aside h3 { font-size: 19px; }
+  .pricing-card { min-height: auto; }
+  .guide-nav { padding-block: 12px; }
+  .guide-nav-actions .primary-button { display: none; }
+  .guide-hero h1 { font-size: 38px; }
+  .guide-hero-note { margin-top: 21px; }
+  .guide-card { padding: 20px; border-radius: 18px; }
+  .guide-flow { grid-template-columns: 1fr; margin-top: 23px; }
+  .guide-flow li { min-height: 0; padding: 15px; }
+  .guide-flow li > span { margin-bottom: 9px; }
+  .guide-flow li i, .guide-flow li:nth-child(2) i { top: auto; right: 50%; bottom: -13px; left: auto; transform: translateX(50%) rotate(-90deg); }
+  .guide-more-grid { grid-template-columns: 1fr; }
+  .guide-cta { flex-direction: column; align-items: flex-start; margin-inline: 18px; padding: 24px; }
+  .guide-cta h2 { font-size: 18px; }
+  .guide-footer { align-items: flex-start; flex-direction: column; }
+  .backup-actions .primary-button, .backup-actions .btn-secondary { width: 100%; min-width: 0; }
+}
