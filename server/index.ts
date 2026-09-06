@@ -325,18 +325,14 @@ const serveStaticFile = (request: IncomingMessage, result: ServerResponse, urlPa
   if (!existsSync(filePath)) return false;
 
   const extension = extname(filePath);
-  const isAttachment = extension === '.zip';
   const stats = statSync(filePath);
   const headers: Record<string, string> = {
     'Content-Type': mimeTypes[extension] ?? 'application/octet-stream',
     'Content-Length': String(stats.size),
     'Accept-Ranges': 'bytes',
     'Last-Modified': stats.mtime.toUTCString(),
-    // زیپ در هر ساخت عوض می‌شود، پس کش نمی‌شود؛ بقیه‌ی دارایی‌ها بی‌تاریخ‌اند
-    'Cache-Control': extension === '.html' || isAttachment ? 'no-cache' : 'public, max-age=31536000, immutable',
+    'Cache-Control': extension === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
   };
-  if (isAttachment) headers['Content-Disposition'] = `attachment; filename="rakahar-source.zip"; filename*=UTF-8''${encodeURIComponent('راهکار-سورس.zip')}`;
-
   const isHead = request.method === 'HEAD';
 
   // دریافتِ بخشی (ادامه‌ی دانلود / دانلودِ چندبخشی)
