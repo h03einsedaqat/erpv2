@@ -1014,9 +1014,13 @@ window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => 
 
 /** پس از خروج یا پایانِ نشست، بازسازی‌های بعدی باید صفحه‌ی ورود را نشان دهند نه صفحه‌ی معرفی */
 let preferLoginScreen = false;
+function isLoginRoute(): boolean {
+  return window.location.hash === '#login';
+}
+
 function render(): void {
   if (!session) {
-    if (preferLoginScreen) renderLogin();
+    if (preferLoginScreen || isLoginRoute()) renderLogin();
     else {
       const guideId = moduleGuideIdFromLocation();
       if (guideId) renderModuleGuide(guideId);
@@ -1074,12 +1078,6 @@ function render(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-post-journal]').forEach((button) => button.addEventListener('click', () => void postJournalEntry(button.dataset.postJournal ?? '')));
   document.querySelectorAll<HTMLButtonElement>('[data-journal-lines]').forEach((button) => button.addEventListener('click', () => showJournalLines(button.dataset.journalLines ?? '')));
   document.querySelector<HTMLButtonElement>('#connect-server')?.addEventListener('click', openServerLogin);
-  document.querySelectorAll<HTMLButtonElement>('[data-report-tab]').forEach((button) =>
-    button.addEventListener('click', () => {
-      activeReportTab = (button.dataset.reportTab ?? 'balance') as typeof activeReportTab;
-      render();
-    }),
-  );
   document.querySelectorAll<HTMLButtonElement>('[data-costing-method]').forEach((button) =>
     button.addEventListener('click', () => {
       costingMethod = (button.dataset.costingMethod ?? 'wac') as typeof costingMethod;
@@ -1100,10 +1098,6 @@ function render(): void {
     button.addEventListener('click', () => void matchBankStatement(button.dataset.matchStatement ?? '', button.dataset.entry ?? '')),
   );
   document.querySelector<HTMLButtonElement>('#close-fiscal-year')?.addEventListener('click', () => void closeFiscalYear());
-  document.querySelector<HTMLButtonElement>('#load-subsidiary')?.addEventListener('click', () => {
-    const input = document.querySelector<HTMLInputElement>('#subsidiary-account');
-    if (input?.value.trim()) void loadSubsidiary(input.value.trim());
-  });
   document.querySelector<HTMLButtonElement>('#new-lead')?.addEventListener('click', openLeadForm);
   document.querySelector<HTMLButtonElement>('#new-ticket')?.addEventListener('click', openTicketForm);
   document.querySelector<HTMLButtonElement>('#new-budget')?.addEventListener('click', openBudgetForm);
@@ -1441,13 +1435,6 @@ function returnToLanding(): void {
   renderLanding();
 }
 
-/** راهنمای ماژول یک صفحه عمومی است؛ پیش از ورود hash آن را کنار می‌گذاریم تا بازسازی صفحه، فرم ورود را نپوشاند. */
-function openLoginFromGuide(): void {
-  preferLoginScreen = true;
-  window.history.replaceState({ login: true }, '', publicPath());
-  renderLogin();
-}
-
 function renderModuleGuide(moduleId: string): void {
   const app = document.querySelector<HTMLDivElement>('#app');
   const module = moduleData.find((item) => item.id === moduleId);
@@ -1459,7 +1446,7 @@ function renderModuleGuide(moduleId: string): void {
   app.innerHTML = `<main class="module-guide-page">
     <header class="guide-nav">
       <button class="guide-brand" id="guide-home" type="button" aria-label="بازگشت به صفحه اصلی"><span class="brand-mark">ر</span><span>راهکار</span></button>
-      <div class="guide-nav-actions"><button class="guide-back" id="guide-back" type="button">← همه ماژول‌ها</button><button class="primary-button small" id="guide-login" type="button">ورود به سامانه</button></div>
+      <div class="guide-nav-actions"><button class="guide-back" id="guide-back" type="button">← همه ماژول‌ها</button><a class="primary-button small guide-login-link" id="guide-login" href="#login">ورود به سامانه</a></div>
     </header>
     <section class="guide-hero">
       <div class="guide-hero-copy"><span class="guide-kicker"><i>${module.icon}</i> آشنایی با ماژول</span><h1>${module.label}</h1><p>${guide.summary}</p><div class="guide-hero-note"><span>برای چه کسی مفید است؟</span><strong>${guide.value}</strong></div></div>
@@ -1471,26 +1458,26 @@ function renderModuleGuide(moduleId: string): void {
       <article class="guide-card guide-outcome"><span class="guide-card-number">۰۳</span><h2>نتیجه برای سازمان</h2><p>${guide.outcome}</p><ul>${module.features.slice(0, 6).map((feature) => `<li><span>✓</span>${feature}</li>`).join('')}</ul></article>
     </section>
     <section class="guide-more-section"><div><p class="eyebrow">ادامه آشنایی</p><h2>ماژول‌های دیگر را هم ببینید</h2></div><div class="guide-more-grid">${related.map((item) => `<button type="button" class="guide-more-card" data-module-guide="${item.id}"><span>${item.icon}</span><strong>${item.label}</strong><b>←</b></button>`).join('')}</div></section>
-    <section class="guide-cta"><div><span>آماده‌اید در عمل ببینید؟</span><h2>همه بخش‌ها در یک محیط هماهنگ کنار هم کار می‌کنند.</h2></div><button class="secondary-button" id="guide-start" type="button">شروع رایگان <span>←</span></button></section>
+    <section class="guide-cta"><div><span>آماده‌اید در عمل ببینید؟</span><h2>همه بخش‌ها در یک محیط هماهنگ کنار هم کار می‌کنند.</h2></div><a class="secondary-button" id="guide-start" href="#login">شروع رایگان <span>←</span></a></section>
     <footer class="guide-footer"><span>راهکار · سیستم یکپارچه برنامه‌ریزی سازمان</span><button type="button" id="guide-footer-home">بازگشت به صفحه اصلی</button></footer>
   </main>`;
   window.scrollTo({ top: 0, behavior: 'auto' });
   document.querySelector<HTMLButtonElement>('#guide-home')?.addEventListener('click', returnToLanding);
   document.querySelector<HTMLButtonElement>('#guide-back')?.addEventListener('click', returnToLanding);
   document.querySelector<HTMLButtonElement>('#guide-footer-home')?.addEventListener('click', returnToLanding);
-  document.querySelector<HTMLButtonElement>('#guide-login')?.addEventListener('click', openLoginFromGuide);
-  document.querySelector<HTMLButtonElement>('#guide-start')?.addEventListener('click', openLoginFromGuide);
   document.querySelectorAll<HTMLButtonElement>('[data-module-guide]').forEach((button) =>
     button.addEventListener('click', () => openModuleGuide(button.dataset.moduleGuide ?? '')),
   );
 }
 
-window.addEventListener('popstate', () => {
-  if (session || preferLoginScreen || document.querySelector('.login-page-modern')) return;
-  const guideId = moduleGuideIdFromLocation();
-  if (guideId) renderModuleGuide(guideId);
-  else renderLanding();
-});
+/** مسیرهای عمومی (راهنمای ماژول و ورود) بدون وابستگی به listener دکمه رندر می‌شوند. */
+function renderPublicRoute(): void {
+  if (session) return;
+  preferLoginScreen = isLoginRoute();
+  render();
+}
+window.addEventListener('popstate', renderPublicRoute);
+window.addEventListener('hashchange', renderPublicRoute);
 
 function cashBalanceChartMarkup(): string {
   const ordered = [...treasuryTransactions].sort((a, b) => {
@@ -2176,12 +2163,6 @@ type WorkflowTransition = { action: string; to: string; label: string; permissio
 type ServerJournalLine = { accountCode: string; accountTitle: string; debit: number; credit: number; costCenter?: string };
 type JournalEntry = { id: string; number: number; description: string; sourceType: string; moduleId?: string; lines: ServerJournalLine[]; totalDebit: number; totalCredit: number; status: string; createdBy?: string; createdAt: string; postedAt?: string };
 type TrialBalanceRow = { code: string; title: string; debit: number; credit: number; balance: number };
-type ReportLine = { accountCode: string; accountTitle: string; amount: number };
-type BalanceSheet = { assets: ReportLine[]; liabilities: ReportLine[]; equity: ReportLine[]; totalAssets: number; totalLiabilities: number; totalEquity: number; netIncome: number; balanced: boolean };
-type ProfitLoss = { revenues: ReportLine[]; expenses: ReportLine[]; totalRevenue: number; totalExpense: number; netIncome: number };
-type LedgerMovement = { accountCode: string; accountTitle: string; kind: string; debit: number; credit: number; balance: number; nature: string };
-type SubsidiaryReport = { accountTitle: string; debit: number; credit: number; balance: number; nature: string; lines: Array<{ entryNumber: number; date: string; description: string; debit: number; credit: number; runningBalance: number; nature: string; costCenter?: string }> };
-type VatReport = { outputVat: number; inputVat: number; payableVat: number; entries: number };
 type FinancialSummary = { postedEntries: number; draftEntries: number; totalDebit: number; totalCredit: number; balanced: boolean };
 
 let serverDocuments: ServerDocument[] = [];
@@ -2192,11 +2173,6 @@ let workflowTransitions: Record<string, WorkflowTransition[]> = {};
 let journalEntries: JournalEntry[] = [];
 let trialBalance: TrialBalanceRow[] = [];
 let financialSummary: FinancialSummary | null = null;
-let balanceSheet: BalanceSheet | null = null;
-let profitLoss: ProfitLoss | null = null;
-let generalLedger: LedgerMovement[] = [];
-let subsidiaryReport: SubsidiaryReport | null = null;
-let vatReport: VatReport | null = null;
 let costingMethod: 'wac' | 'fifo' = 'wac';
 let inventoryCosting: { method: string; rows: Array<{ itemId: string; itemTitle: string; quantity: number; unitCost: number; value: number }>; totalValue: number } | null = null;
 let stockMovements: Array<{ id: string; itemTitle: string; date: string; type: string; quantity: number; unitCost: number; costAmount: number }> = [];
@@ -2207,8 +2183,6 @@ let bankReconciliation: {
   suggestions: Array<{ statementId: string; entryId: string; amount: number; confidence: number }>;
   unmatchedStatements: Array<{ id: string }>;
 } | null = null;
-let activeReportTab: 'balance' | 'profit' | 'ledger' | 'subsidiary' | 'vat' = 'balance';
-let subsidiaryAccount = '';
 let syncingServerData = false;
 
 /** فهرست زنده‌ی کارهایی که از داده‌های واقعی هر ماژول استخراج می‌شود */
@@ -2385,7 +2359,7 @@ function overviewMarkup(): string {
     </article>
   </section>`;
 }
-function accountingMarkup(): string { const rows: JournalLine[] = [{ accountCode: '1100', accountTitle: 'بانک و صندوق', debit: 0, credit: 0 }, { accountCode: '4000', accountTitle: 'درآمد فروش', debit: 0, credit: 0 }]; return `<section class="accounting-page"><div class="accounting-intro"><div><span class="section-kicker">دفتر روزنامه</span><h2>ثبت سند حسابداری</h2><p>هر سند باید حداقل دو ردیف داشته باشد و جمع بدهکار و بستانکار آن برابر باشد.</p></div><div class="balance-chip"><span>دوره مالی فعال</span><strong>۱۴۰۵ · باز</strong></div></div><form class="journal-form" id="journal-form"><div class="journal-fields"><label>شرح سند<input name="description" required placeholder="مثلاً ثبت فروش نقدی مرداد"></label><label>تاریخ سند<input name="date" type="date" value="2026-08-28" required></label></div><div class="journal-table-wrap"><table class="journal-table"><thead><tr><th>کد حساب</th><th>عنوان حساب</th><th>بدهکار (ریال)</th><th>بستانکار (ریال)</th></tr></thead><tbody id="journal-lines">${rows.map((row) => journalRow(row)).join('')}</tbody></table></div><div class="journal-bottom"><button type="button" class="secondary-button" id="add-journal-line">＋ افزودن ردیف</button><div class="journal-totals"><span>جمع بدهکار <strong id="total-debit">۰</strong></span><span>جمع بستانکار <strong id="total-credit">۰</strong></span></div><button class="primary-button" type="submit">ثبت پیش‌نویس سند</button></div><p class="journal-hint" id="journal-hint">برای نمونه، در ردیف اول مبلغ بدهکار و در ردیف دوم مبلغ بستانکار وارد کنید.</p></form><div class="journal-list panel"><div class="panel-heading"><div><h2>اسناد اخیر</h2><p>نمونه‌های آموزشی و اسناد ثبت‌شده‌ی شما</p></div><span class="count">${journals.length} سند</span></div>${journals.length ? journals.map((journal) => `<div class="journal-record"><div><strong>سند شماره ${journal.number}</strong><small>${escapeHtml(journal.description)} · ${journal.status}</small></div><b>${journal.lines.reduce((sum, line) => sum + line.debit, 0).toLocaleString('fa-IR')} ریال</b></div>`).join('') : '<div class="records-empty">هنوز سندی ثبت نشده است.</div>'}</div></section>${fiscalSettingsMarkup()}${serverLedgerMarkup()}${financialReportsMarkup()}`; }
+function accountingMarkup(): string { const rows: JournalLine[] = [{ accountCode: '1100', accountTitle: 'بانک و صندوق', debit: 0, credit: 0 }, { accountCode: '4000', accountTitle: 'درآمد فروش', debit: 0, credit: 0 }]; return `<section class="accounting-page"><div class="accounting-intro"><div><span class="section-kicker">دفتر روزنامه</span><h2>ثبت سند حسابداری</h2><p>هر سند باید حداقل دو ردیف داشته باشد و جمع بدهکار و بستانکار آن برابر باشد.</p></div><div class="balance-chip"><span>دوره مالی فعال</span><strong>۱۴۰۵ · باز</strong></div></div><form class="journal-form" id="journal-form"><div class="journal-fields"><label>شرح سند<input name="description" required placeholder="مثلاً ثبت فروش نقدی مرداد"></label><label>تاریخ سند<input name="date" type="date" value="2026-08-28" required></label></div><div class="journal-table-wrap"><table class="journal-table"><thead><tr><th>کد حساب</th><th>عنوان حساب</th><th>بدهکار (ریال)</th><th>بستانکار (ریال)</th></tr></thead><tbody id="journal-lines">${rows.map((row) => journalRow(row)).join('')}</tbody></table></div><div class="journal-bottom"><button type="button" class="secondary-button" id="add-journal-line">＋ افزودن ردیف</button><div class="journal-totals"><span>جمع بدهکار <strong id="total-debit">۰</strong></span><span>جمع بستانکار <strong id="total-credit">۰</strong></span></div><button class="primary-button" type="submit">ثبت پیش‌نویس سند</button></div><p class="journal-hint" id="journal-hint">برای نمونه، در ردیف اول مبلغ بدهکار و در ردیف دوم مبلغ بستانکار وارد کنید.</p></form><div class="journal-list panel"><div class="panel-heading"><div><h2>اسناد اخیر</h2><p>نمونه‌های آموزشی و اسناد ثبت‌شده‌ی شما</p></div><span class="count">${journals.length} سند</span></div>${journals.length ? journals.map((journal) => `<div class="journal-record"><div><strong>سند شماره ${journal.number}</strong><small>${escapeHtml(journal.description)} · ${journal.status}</small></div><b>${journal.lines.reduce((sum, line) => sum + line.debit, 0).toLocaleString('fa-IR')} ریال</b></div>`).join('') : '<div class="records-empty">هنوز سندی ثبت نشده است.</div>'}</div></section>`; }
 type FinancialStatements = {
   balanceSheet: { assets: Array<{ accountCode: string; accountTitle: string; amount: number }>; liabilities: Array<{ accountCode: string; accountTitle: string; amount: number }>; equity: Array<{ accountCode: string; accountTitle: string; amount: number }>; totalAssets: number; totalLiabilities: number; totalEquity: number; netIncome: number } | null;
   profitLoss: { revenues: Array<{ accountCode: string; accountTitle: string; amount: number }>; expenses: Array<{ accountCode: string; accountTitle: string; amount: number }>; totalRevenue: number; totalExpense: number; netIncome: number } | null;
@@ -3036,7 +3010,7 @@ async function loadServerData(force = false): Promise<boolean> {
 let serverDataInFlight: Promise<boolean> | null = null;
 let lastServerDataAt = 0;
 async function loadServerDataInner(): Promise<boolean> {
-  const [documents, periods, centers, flow, journals, balances, summary, sheet, income, ledger, vat, costing, movements, reconciliation, payslips, payrollTotalsResult, checkRows, checkTotals, insight] = await Promise.all([
+  const [documents, periods, centers, flow, journals, balances, summary, costing, movements, reconciliation, payslips, payrollTotalsResult, checkRows, checkTotals, insight] = await Promise.all([
     apiFetch('/api/documents'),
     apiFetch('/api/fiscal-periods'),
     apiFetch('/api/cost-centers'),
@@ -3044,10 +3018,6 @@ async function loadServerDataInner(): Promise<boolean> {
     apiFetch('/api/accounting/entries'),
     apiFetch('/api/accounting/trial-balance'),
     apiFetch('/api/accounting/summary'),
-    apiFetch('/api/accounting/balance-sheet'),
-    apiFetch('/api/accounting/profit-loss'),
-    apiFetch('/api/accounting/general-ledger'),
-    apiFetch('/api/accounting/vat'),
     apiFetch(`/api/inventory/costing?method=${costingMethod}`),
     apiFetch('/api/inventory/movements'),
     apiFetch('/api/treasury/reconciliation'),
@@ -3066,10 +3036,6 @@ async function loadServerDataInner(): Promise<boolean> {
   if (journals?.ok) journalEntries = ((await journals.json()) as { data: JournalEntry[] }).data;
   if (balances?.ok) trialBalance = ((await balances.json()) as { data: TrialBalanceRow[] }).data;
   if (summary?.ok) financialSummary = ((await summary.json()) as FinancialSummary);
-  if (sheet?.ok) balanceSheet = ((await sheet.json()) as BalanceSheet);
-  if (income?.ok) profitLoss = ((await income.json()) as ProfitLoss);
-  if (ledger?.ok) generalLedger = ((await ledger.json()) as LedgerMovement[]);
-  if (vat?.ok) vatReport = ((await vat.json()) as VatReport);
   if (costing?.ok) inventoryCosting = ((await costing.json()) as typeof inventoryCosting);
   if (movements?.ok) stockMovements = ((await movements.json()) as typeof stockMovements);
   if (reconciliation?.ok) bankReconciliation = ((await reconciliation.json()) as typeof bankReconciliation);
@@ -3078,7 +3044,6 @@ async function loadServerDataInner(): Promise<boolean> {
   if (checkRows?.ok) checks = ((await checkRows.json()) as CheckRecordItem[]);
   if (checkTotals?.ok) checksSummary = ((await checkTotals.json()) as ChecksSummary);
   if (insight?.ok) insights = ((await insight.json()) as InsightSummary);
-  if (subsidiaryAccount && subsidiaryReport === null) await loadSubsidiary(subsidiaryAccount);
   return before !== JSON.stringify([serverDocuments, fiscalPeriods, costCenters, workflowTransitions, journalEntries, trialBalance]);
 }
 
@@ -3155,23 +3120,6 @@ function fiscalSettingsMarkup(): string {
 }
 
 /** پنل اسناد حسابداری صادرشده روی سرور و تراز آزمایشی (فاز ۲) */
-async function loadSubsidiary(accountCode: string): Promise<void> {
-  subsidiaryAccount = accountCode;
-  const result = await apiFetch(`/api/accounting/subsidiary?account=${encodeURIComponent(accountCode)}`);
-  subsidiaryReport = result?.ok ? ((await result.json()) as SubsidiaryReport) : null;
-  render();
-}
-
-function reportRowsMarkup(rows: ReportLine[], tone: 'positive' | 'negative'): string {
-  if (!rows.length) return '<tr><td colspan="2" class="empty-hint">موردی ثبت نشده است</td></tr>';
-  return rows
-    .map(
-      (row) => `<tr><td><strong>${escapeHtml(row.accountTitle)}</strong><small>${escapeHtml(row.accountCode)}</small></td><td class="num ${tone === 'negative' ? 'negative-amount' : ''}">${money(row.amount)}</td></tr>`,
-    )
-    .join('');
-}
-
-
 /* ===================== بهای تمام‌شده‌ی موجودی ===================== */
 
 
@@ -3609,69 +3557,6 @@ async function matchBankStatement(statementId: string, entryId: string): Promise
   await loadServerData(true);
   render();
   showToast(entryId ? 'تطبیق با سند حسابداری ثبت شد' : 'تطبیق لغو شد');
-}
-
-function financialReportsMarkup(): string {
-  const tabs: Array<{ id: typeof activeReportTab; label: string }> = [
-    { id: 'balance', label: 'ترازنامه' },
-    { id: 'profit', label: 'سود و زیان' },
-    { id: 'ledger', label: 'دفتر کل' },
-    { id: 'subsidiary', label: 'دفتر معین' },
-    { id: 'vat', label: 'اظهارنامه ارزش افزوده' },
-  ];
-  let body = '';
-  if (activeReportTab === 'balance' && balanceSheet) {
-    body = `<div class="report-columns">
-      <div class="report-column"><h3>دارایی‌ها</h3><table class="report-table"><tbody>${reportRowsMarkup(balanceSheet.assets, 'positive')}</tbody>
-      <tfoot><tr><td>جمع دارایی‌ها</td><td class="num">${money(balanceSheet.totalAssets)}</td></tr></tfoot></table></div>
-      <div class="report-column"><h3>بدهی‌ها</h3><table class="report-table"><tbody>${reportRowsMarkup(balanceSheet.liabilities, 'positive')}</tbody>
-      <tfoot><tr><td>جمع بدهی‌ها</td><td class="num">${money(balanceSheet.totalLiabilities)}</td></tr></tfoot></table>
-      <h3 class="mt">حقوق صاحب سرمایه</h3><table class="report-table"><tbody>${reportRowsMarkup(balanceSheet.equity, 'positive')}</tbody>
-      <tfoot><tr><td>جمع حقوق صاحب سرمایه</td><td class="num">${money(balanceSheet.totalEquity)}</td></tr></tfoot></table></div>
-    </div><p class="report-note ${balanceSheet.balanced ? 'ok' : 'warn'}">${balanceSheet.balanced ? '✓ ترازنامه متوازن است: دارایی‌ها = بدهی‌ها + حقوق صاحب سرمایه' : '⚠ ترازنامه نامتوازن است؛ اسناد قطعی را بررسی کنید'}</p>`;
-  } else if (activeReportTab === 'profit' && profitLoss) {
-    body = `<div class="report-columns">
-      <div class="report-column"><h3>درآمدها</h3><table class="report-table"><tbody>${reportRowsMarkup(profitLoss.revenues, 'positive')}</tbody>
-      <tfoot><tr><td>جمع درآمدها</td><td class="num">${money(profitLoss.totalRevenue)}</td></tr></tfoot></table></div>
-      <div class="report-column"><h3>هزینه‌ها</h3><table class="report-table"><tbody>${reportRowsMarkup(profitLoss.expenses, 'positive')}</tbody>
-      <tfoot><tr><td>جمع هزینه‌ها</td><td class="num">${money(profitLoss.totalExpense)}</td></tr></tfoot></table></div>
-    </div><p class="report-note ${profitLoss.netIncome >= 0 ? 'ok' : 'warn'}">${profitLoss.netIncome >= 0 ? 'سود خالص دوره' : 'زیان خالص دوره'}: ${money(Math.abs(profitLoss.netIncome))} ریال</p>`;
-  } else if (activeReportTab === 'ledger') {
-    body = generalLedger.length
-      ? `<table class="report-table"><thead><tr><th>کد</th><th>حساب</th><th class="num">گردش بدهکار</th><th class="num">گردش بستانکار</th><th class="num">مانده</th><th>جهت</th></tr></thead><tbody>${generalLedger
-          .map(
-            (row) => `<tr><td>${escapeHtml(row.accountCode)}</td><td>${escapeHtml(row.accountTitle)}</td><td class="num">${money(row.debit)}</td><td class="num">${money(row.credit)}</td><td class="num">${money(row.balance)}</td><td>${escapeHtml(row.nature)}</td></tr>`,
-          )
-          .join('')}</tbody></table>`
-      : '<p class="empty-hint">سند قطعی برای نمایش دفتر کل ثبت نشده است</p>';
-  } else if (activeReportTab === 'subsidiary') {
-    body = `<div class="ledger-toolbar"><label>کد حساب<input id="subsidiary-account" value="${escapeHtml(subsidiaryAccount)}" placeholder="مثلاً ۱۲۰۰" inputmode="numeric"></label><button class="primary-button small" id="load-subsidiary">نمایش گردش</button></div>${
-      subsidiaryReport
-        ? `<p class="ledger-caption">${escapeHtml(subsidiaryReport.accountTitle || subsidiaryAccount)} — بدهکار ${money(subsidiaryReport.debit)} | بستانکار ${money(subsidiaryReport.credit)} | مانده ${money(subsidiaryReport.balance)} (${escapeHtml(subsidiaryReport.nature)})</p>
-        <table class="report-table"><thead><tr><th>سند</th><th>تاریخ</th><th>شرح</th><th>مرکز هزینه</th><th class="num">بدهکار</th><th class="num">بستانکار</th><th class="num">مانده</th></tr></thead><tbody>${
-          subsidiaryReport.lines.length
-            ? subsidiaryReport.lines
-                .map(
-                  (item) => `<tr><td>${item.entryNumber}</td><td>${escapeHtml(item.date)}</td><td>${escapeHtml(item.description)}</td><td>${escapeHtml(item.costCenter ?? '—')}</td><td class="num">${item.debit ? money(item.debit) : '—'}</td><td class="num">${item.credit ? money(item.credit) : '—'}</td><td class="num">${money(item.runningBalance)}</td></tr>`,
-                )
-                .join('')
-            : '<tr><td colspan="7" class="empty-hint">گردشی برای این حساب ثبت نشده است</td></tr>'
-        }</tbody></table>`
-        : '<p class="empty-hint">کد حساب را وارد کنید</p>'
-    }`;
-  } else if (activeReportTab === 'vat' && vatReport) {
-    body = `<div class="vat-grid">
-      <article><span>ارزش افزوده فروش (خروجی)</span><strong>${money(vatReport.outputVat)}</strong><small>ریال</small></article>
-      <article><span>ارزش افزوده خرید (ورودی)</span><strong>${money(vatReport.inputVat)}</strong><small>ریال</small></article>
-      <article class="accent"><span>مالیات قابل پرداخت</span><strong>${money(vatReport.payableVat)}</strong><small>ریال</small></article>
-    </div><p class="report-note ${vatReport.payableVat >= 0 ? 'ok' : 'warn'}">${vatReport.payableVat >= 0 ? 'مبلغ قابل پرداخت به اداره مالیات' : 'اعتبار مالیاتی قابل استرداد یا انتقال به دوره بعد'}</p>`;
-  } else {
-    body = '<p class="empty-hint">گزارش در دسترس نیست</p>';
-  }
-  return `<div class="panel report-panel"><div class="panel-heading"><div><h2>گزارش‌های مالی</h2><p>محاسبه‌شده از اسناد حسابداری قطعی‌شده</p></div><span class="count">${tabs.length} گزارش</span></div>
-    <div class="finance-tabs">${tabs
-      .map((tab) => `<button class="finance-tab ${activeReportTab === tab.id ? 'active' : ''}" data-report-tab="${tab.id}">${tab.label}</button>`)
-      .join('')}</div><div class="report-body">${body}</div></div>`;
 }
 
 function serverLedgerMarkup(): string {
