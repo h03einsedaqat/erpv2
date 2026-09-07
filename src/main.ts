@@ -1014,8 +1014,19 @@ window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => 
 
 /** پس از خروج یا پایانِ نشست، بازسازی‌های بعدی باید صفحه‌ی ورود را نشان دهند نه صفحه‌ی معرفی */
 let preferLoginScreen = false;
+/**
+ * مسیر ورود علاوه بر hash، یک query مستقل دارد تا خودِ لینک بتواند یک navigation کامل
+ * انجام دهد. به این شکل اگر مرورگر رویداد hashchange را در صفحهٔ کش‌شده اجرا نکند،
+ * دکمهٔ ورودِ راهنما همچنان قطعاً صفحهٔ ورود را باز می‌کند.
+ */
 function isLoginRoute(): boolean {
-  return window.location.hash === '#login';
+  return window.location.hash === '#login' || new URLSearchParams(window.location.search).get('login') === '1';
+}
+
+function loginRouteHref(): string {
+  const params = new URLSearchParams(window.location.search);
+  params.set('login', '1');
+  return `${window.location.pathname}?${params.toString()}#login`;
 }
 
 function render(): void {
@@ -1446,7 +1457,7 @@ function renderModuleGuide(moduleId: string): void {
   app.innerHTML = `<main class="module-guide-page">
     <header class="guide-nav">
       <button class="guide-brand" id="guide-home" type="button" aria-label="بازگشت به صفحه اصلی"><span class="brand-mark">ر</span><span>راهکار</span></button>
-      <div class="guide-nav-actions"><button class="guide-back" id="guide-back" type="button">← همه ماژول‌ها</button><a class="primary-button small guide-login-link" id="guide-login" href="#login">ورود به سامانه</a></div>
+      <div class="guide-nav-actions"><button class="guide-back" id="guide-back" type="button">← همه ماژول‌ها</button><a class="primary-button small guide-login-link" id="guide-login" href="${loginRouteHref()}">ورود به سامانه</a></div>
     </header>
     <section class="guide-hero">
       <div class="guide-hero-copy"><span class="guide-kicker"><i>${module.icon}</i> آشنایی با ماژول</span><h1>${module.label}</h1><p>${guide.summary}</p><div class="guide-hero-note"><span>برای چه کسی مفید است؟</span><strong>${guide.value}</strong></div></div>
@@ -1458,7 +1469,7 @@ function renderModuleGuide(moduleId: string): void {
       <article class="guide-card guide-outcome"><span class="guide-card-number">۰۳</span><h2>نتیجه برای سازمان</h2><p>${guide.outcome}</p><ul>${module.features.slice(0, 6).map((feature) => `<li><span>✓</span>${feature}</li>`).join('')}</ul></article>
     </section>
     <section class="guide-more-section"><div><p class="eyebrow">ادامه آشنایی</p><h2>ماژول‌های دیگر را هم ببینید</h2></div><div class="guide-more-grid">${related.map((item) => `<button type="button" class="guide-more-card" data-module-guide="${item.id}"><span>${item.icon}</span><strong>${item.label}</strong><b>←</b></button>`).join('')}</div></section>
-    <section class="guide-cta"><div><span>آماده‌اید در عمل ببینید؟</span><h2>همه بخش‌ها در یک محیط هماهنگ کنار هم کار می‌کنند.</h2></div><a class="secondary-button" id="guide-start" href="#login">شروع رایگان <span>←</span></a></section>
+    <section class="guide-cta"><div><span>آماده‌اید در عمل ببینید؟</span><h2>همه بخش‌ها در یک محیط هماهنگ کنار هم کار می‌کنند.</h2></div><a class="secondary-button" id="guide-start" href="${loginRouteHref()}">شروع رایگان <span>←</span></a></section>
     <footer class="guide-footer"><span>راهکار · سیستم یکپارچه برنامه‌ریزی سازمان</span><button type="button" id="guide-footer-home">بازگشت به صفحه اصلی</button></footer>
   </main>`;
   window.scrollTo({ top: 0, behavior: 'auto' });

@@ -1755,7 +1755,7 @@ button:active { transform: translateY(1px); }
 .guide-nav { display: flex; align-items: center; justify-content: space-between; gap: 18px; max-width: 1360px; margin: 0 auto; padding: 16px clamp(18px, 5vw, 64px); }
 .guide-brand { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: #173e39; font-size: 18px; font-weight: 850; }
 .guide-brand .brand-mark { width: 40px; height: 40px; border-radius: 13px; color: #fff; font-size: 23px; }
-.guide-nav-actions { display: flex; align-items: center; gap: 9px; }
+.guide-nav-actions { position: relative; z-index: 2; display: flex; align-items: center; gap: 9px; }
 .guide-back { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 11px; background: transparent; color: #52716a; font-size: 12px; font-weight: 700; }
 .guide-back:hover { background: #e7f2ed; color: #177461; }
 .guide-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(280px, .9fr); gap: 40px; align-items: center; max-width: 1220px; margin: 0 auto; padding: clamp(45px, 7vw, 90px) clamp(18px, 5vw, 45px) clamp(54px, 8vw, 92px); }
@@ -2307,6 +2307,6 @@ button:active { transform: translateY(1px); }
 
 /* پیوند ورود در راهنمای ماژول همان ظاهر دکمه را دارد، اما با مسیر مستقل #login
    حتی اگر رندر صفحه دوباره اجرا شود قابل استفاده می‌ماند. */
-.guide-login-link { text-decoration: none; }
+.guide-login-link { position: relative; z-index: 3; cursor: pointer; pointer-events: auto; text-decoration: none; }
 .guide-login-link:focus-visible,
 .guide-cta a:focus-visible { outline: 3px solid rgba(42, 174, 140, .48); outline-offset: 3px; }
