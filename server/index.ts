@@ -304,7 +304,7 @@ function storeListMembershipsSync(userId: string): Array<{ organizationId: strin
 /** سرو فایل‌های استاتیک خروجی Vite در صورت وجود، برای اجرای تک‌فرآیندی frontend و API */
 const distDirectory = resolve(process.cwd(), 'dist');
 const serveStatic = process.env.SERVE_STATIC ? process.env.SERVE_STATIC !== 'false' : existsSync(join(distDirectory, 'index.html'));
-const mimeTypes: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.map': 'application/json; charset=utf-8', '.zip': 'application/zip', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8' };
+const mimeTypes: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.map': 'application/json; charset=utf-8', '.zip': 'application/zip', '.pdf': 'application/pdf', '.txt': 'text/plain; charset=utf-8' };
 /**
  * سروِ فایل‌های ثابت با پشتیبانیِ کامل از «دانلود» :
  *  - پاسخ به درخواستِ HEAD (برنامه‌هایی مانند Internet Download Manager نخست
@@ -325,18 +325,14 @@ const serveStaticFile = (request: IncomingMessage, result: ServerResponse, urlPa
   if (!existsSync(filePath)) return false;
 
   const extension = extname(filePath);
-  const isAttachment = extension === '.zip';
   const stats = statSync(filePath);
   const headers: Record<string, string> = {
     'Content-Type': mimeTypes[extension] ?? 'application/octet-stream',
     'Content-Length': String(stats.size),
     'Accept-Ranges': 'bytes',
     'Last-Modified': stats.mtime.toUTCString(),
-    // زیپ در هر ساخت عوض می‌شود، پس کش نمی‌شود؛ بقیه‌ی دارایی‌ها بی‌تاریخ‌اند
-    'Cache-Control': extension === '.html' || isAttachment ? 'no-cache' : 'public, max-age=31536000, immutable',
+    'Cache-Control': extension === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
   };
-  if (isAttachment) headers['Content-Disposition'] = `attachment; filename="rakahar-source.zip"; filename*=UTF-8''${encodeURIComponent('راهکار-سورس.zip')}`;
-
   const isHead = request.method === 'HEAD';
 
   // دریافتِ بخشی (ادامه‌ی دانلود / دانلودِ چندبخشی)

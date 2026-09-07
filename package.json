@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "concurrently -n api,web -c cyan,magenta \"npm:server\" \"npm:client\"",
-    "build": "tsc --noEmit && vite build && node --import tsx scripts/build-source-bundle.mjs dist",
+    "build": "tsc --noEmit && vite build",
     "server": "tsx server/index.ts",
     "client": "vite",
     "serve": "tsx server/index.ts",
@@ -23,8 +23,8 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "package:win": "node scripts/build-windows-package.mjs",
-    "build:demo": "tsc --noEmit && cross-env VITE_DEMO=true BASE_PATH=./ vite build && node --import tsx scripts/build-source-bundle.mjs dist && node scripts/prepare-pages.mjs",
-    "build:demo:local": "cross-env VITE_DEMO=true BASE_PATH=./ vite build --outDir dist-demo && node --import tsx scripts/build-source-bundle.mjs dist-demo && node scripts/prepare-pages.mjs dist-demo",
+    "build:demo": "tsc --noEmit && cross-env VITE_DEMO=true BASE_PATH=./ vite build && node scripts/prepare-pages.mjs",
+    "build:demo:local": "cross-env VITE_DEMO=true BASE_PATH=./ vite build --outDir dist-demo && node scripts/prepare-pages.mjs dist-demo",
     "code:collect": "node scripts/collect-code.mjs"
   },
   "dependencies": {
