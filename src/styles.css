@@ -732,8 +732,6 @@ input[type="date"], input[type="number"] { direction: ltr; text-align: right; }
   .page-heading { flex-direction: column; align-items: flex-start; gap: 14px; padding: 4px 18px 0; }
   .page-heading h1 { font-size: 26px; }
   .overview-kpis, .access-kpis, .costing-summary, .recon-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .data-table { display: block; overflow-x: auto; white-space: nowrap; }
-
   /* در موبایل منو به‌صورت کشو باز می‌شود؛ آیکون همراه با نام بخش نمایش داده شود */
   .sidebar { width: min(310px, 86vw); padding: 20px 16px; }
   .brand { padding: 0 6px 25px; justify-content: flex-start; }
@@ -2310,3 +2308,45 @@ button:active { transform: translateY(1px); }
 .guide-login-link { position: relative; z-index: 3; cursor: pointer; pointer-events: auto; text-decoration: none; }
 .guide-login-link:focus-visible,
 .guide-cta a:focus-visible { outline: 3px solid rgba(42, 174, 140, .48); outline-offset: 3px; }
+
+
+/* ============================================================
+   جدول‌های واکنش‌گرا — موبایل و تبلت (≤ ۹۰۰ پیکسل)
+   ------------------------------------------------------------
+   این بخش عمداً در «انتهای فایل» قرار دارد تا در اولویتِ
+   قانون‌های هم‌ارزشِ پیشین باشد (مانند «table { min-width: 600px }»
+   یا «.ledger-panel table { min-width: 710px }»).
+
+   منطقِ اصلاح: پیش‌تر در موبایل فقط برخی جدول‌ها «display: block»
+   می‌شدند، در حالی که قانونِ سراسریِ min-width روی آن‌ها باقی می‌ماند؛
+   نتیجه این بود که خودِ ظرفِ اسکرول از صفحه بیرون می‌زد و
+   ستون‌های انتهایی هرگز دیده نمی‌شدند.
+
+   اکنون «هر جدولی» (در محتوای اصلی یا مودال‌ها) خودش ظرفِ
+   اسکرولِ افقی می‌شود؛ min-width صفر می‌شود تا جعبه‌ی جدول
+   هم‌عرضِ صفحه بماند و محتوای پهن‌تر با کشیدن به چپ و راست
+   قابل مشاهده باشد. -webkit-overflow-scrolling هم اسکرولِ
+   نرمِ لمسیِ iOS را فعال می‌کند.
+   ============================================================ */
+@media (max-width: 900px) {
+  .main-content table,
+  .record-modal table {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+  /* فشرده‌تر شدنِ سلول‌ها در عرض‌های کم تا ستون‌های بیشتری جا شوند */
+  .main-content th, .main-content td,
+  .record-modal th, .record-modal td { padding-inline: 10px; }
+}
+
+/* در چاپ، جدول‌ها به حالتِ عادی برمی‌گردند (بدون اسکرول) تا روی کاغذ کامل بیایند.
+   این بلوک هم بعد از بلوکِ موبایل می‌آید تا هنگامِ چاپِ صفحۀ باریک، اولویت داشته باشد. */
+@media print {
+  .main-content table,
+  .record-modal table { display: table; overflow: visible; }
+}
